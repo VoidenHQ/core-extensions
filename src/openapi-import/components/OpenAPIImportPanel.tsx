@@ -13,7 +13,7 @@ import {
 } from "../utils/converter";
 
 type Props = { context: ExtendedPluginContextExplicit };
-import "../openapi-plugin.css";
+import "../openapi-plugin.scss";
 import { ArrowUp,ArrowDown, CircleX } from "lucide-react";
 
 // ──────────────────────────────────────────────────────────────────────────────
