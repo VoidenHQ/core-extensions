@@ -15,7 +15,14 @@
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "noEmit": false
+    "noEmit": false,
+    "baseUrl": ".",
+    "paths": {
+      "prosemirror-state": ["./node_modules/prosemirror-state"],
+      "prosemirror-view": ["./node_modules/prosemirror-view"],
+      "prosemirror-model": ["./node_modules/prosemirror-model"],
+      "prosemirror-transform": ["./node_modules/prosemirror-transform"]
+    }
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", "src/rest-api"]
