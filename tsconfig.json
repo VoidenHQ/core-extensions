@@ -18,6 +18,7 @@
     "noEmit": false,
     "baseUrl": ".",
     "paths": {
+      "@voiden/sdk/runner": ["./src/types/sdk-runner.d.ts"],
       "prosemirror-state": ["./node_modules/prosemirror-state"],
       "prosemirror-view": ["./node_modules/prosemirror-view"],
       "prosemirror-model": ["./node_modules/prosemirror-model"],
