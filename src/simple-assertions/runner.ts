@@ -15,20 +15,6 @@ import type { RunnerFactory, RunnerContext, CliResponseState } from '@voiden/sdk
 const createSimpleAssertionsRunner: RunnerFactory = (context: RunnerContext) => {
   return {
     onload() {
-      // ── Block schemas ──────────────────────────────────────────────────────
-      // Mirrors AssertionsTable.tsx addAttributes() and AssertionsTableWrapper
-      context.registerBlockSchema({
-        name: 'assertions-table-wrapper',
-        attrs: {},
-      })
-      context.registerBlockSchema({
-        name: 'assertions-table',
-        attrs: {
-          importedFrom: { default: '' },
-          rows:         { default: [] },
-        },
-      })
-
       // Pre-processing: capture editor document into requestState.metadata
       // so the post-processing hook can read assertion blocks.
       context.pipeline.registerHook(

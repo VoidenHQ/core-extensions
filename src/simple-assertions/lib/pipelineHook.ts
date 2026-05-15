@@ -72,8 +72,11 @@ function extractTableData(tableNode: any): Assertion[] {
     }
 
     // 2. Check if using direct row array in content (common in parser-generated docs)
-    const table = tableNode.content?.[0]; // Get the actual table node
-    if (!table || (table.type !== "table" && table.type !== "assertions-table")) {
+    const table = Array.isArray(tableNode.content)
+      ? tableNode.content.find((n: any) => n.type === "table" || n.type === "assertions-table")
+      : null;
+
+    if (!table) {
       return assertions;
     }
 
@@ -239,6 +242,24 @@ export async function postProcessAssertionsHook(context: any): Promise<void> {
       passedAssertions,
       failedAssertions,
     };
+
+    // Also push to reportEntries for CLI/CSV reporting
+    if (!Array.isArray(responseState.metadata.reportEntries)) {
+      responseState.metadata.reportEntries = [];
+    }
+    for (const r of results) {
+      const label = r.assertion?.description?.trim()
+        || `${r.assertion?.field ?? ""}` + (r.assertion?.operator ? ` ${r.assertion.operator} ` : "") + `${r.assertion?.expectedValue ?? ""}`.trim();
+      
+      responseState.metadata.reportEntries.push({
+        type:     "assertion",
+        message:  label || "Assertion",
+        passed:   r.passed,
+        actual:   r.actualValue === undefined && r.error ? `Error: ${r.error}` : r.actualValue,
+        expected: r.assertion?.expectedValue,
+        operator: r.assertion?.operator,
+      });
+    }
   } catch (error) {
     console.error("[Simple Assertions] Error in post-process assertions hook:", error);
   }

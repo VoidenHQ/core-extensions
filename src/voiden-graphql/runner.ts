@@ -87,25 +87,6 @@ export function buildRequest(blocks: Block[]): RestApiRequestState | null {
 const createGraphQLRunner: RunnerFactory = (context: RunnerContext) => {
   return {
     onload() {
-      // ── Block schemas (headless equivalent of registerVoidenExtension) ───────
-      // Mirrors addAttributes() on the TipTap nodes defined in ./nodes/
-      context.registerBlockSchema({
-        name: 'gqlquery',
-        attrs: {
-          body:          { default: '' },
-          operationType: { default: 'query' },
-          operationName: { default: undefined },
-          endpoint:      { default: undefined },
-          schemaUrl:     { default: undefined },
-        },
-      })
-      context.registerBlockSchema({
-        name: 'gqlvariables',
-        attrs: {
-          body: { default: '{}' },
-        },
-      })
-
       // ── Request builder ───────────────────────────────────────────────────
       // Registers with the shared RequestOrchestrator. If this plugin is disabled
       // its handler is never registered → GraphQL requests fail gracefully.

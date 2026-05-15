@@ -85,47 +85,6 @@ export function buildRequest(blocks: Block[]): RestApiRequestState | null {
 const createSocketsRunner: RunnerFactory = (context: RunnerContext) => {
   return {
     onload() {
-      // ── Block schemas (headless equivalent of registerVoidenExtension) ───────
-      // Mirrors addAttributes() on the TipTap nodes defined in ./nodes/
-      context.registerBlockSchema({
-        name: 'socket-request',
-        attrs: {},  // container node — content holds surl, smethod, proto
-      })
-      context.registerBlockSchema({
-        name: 'surl',
-        attrs: {
-          content: { default: '' },
-        },
-      })
-      context.registerBlockSchema({
-        name: 'smethod',
-        attrs: {
-          content: { default: 'GET' },
-        },
-      })
-      context.registerBlockSchema({
-        name: 'proto',
-        attrs: {
-          protoFilePath: { default: undefined },
-          service:       { default: undefined },
-          method:        { default: undefined },
-          package:       { default: undefined },
-          callType:      { default: 'unary' },
-        },
-      })
-      context.registerBlockSchema({
-        name: 'messages-node',
-        attrs: {
-          messages: { default: [] },
-        },
-      })
-      context.registerBlockSchema({
-        name: 'grpc-messages-node',
-        attrs: {
-          messages: { default: [] },
-        },
-      })
-
       // ── Request builder ───────────────────────────────────────────────────
       context.onBuildRequest((request, blocks) => {
         const built = buildRequest(blocks)
