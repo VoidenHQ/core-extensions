@@ -115,53 +115,59 @@ const createRestApiRunner: RunnerFactory = (context: RunnerContext) => {
     onload() {
       // ── Block schemas (headless equivalent of registerVoidenExtension) ───────
       // Mirrors addAttributes() on the TipTap nodes defined in ./nodes/
+      // Each entry matches the node's addAttributes() return value exactly.
+
+      // RequestNode — container; method + url are child nodes in block.content
       context.registerBlockSchema({
         name: 'request',
-        attrs: {},  // container node — content holds method + url child nodes
+        attrs: {},
       })
+
+      // MethodNode — method text lives in block.content (not attrs).
+      // attrs hold metadata only (mirrors MethodNode.addAttributes)
       context.registerBlockSchema({
         name: 'method',
         attrs: {
-          content: { default: 'GET' },
+          method:       { default: 'GET' },
+          importedFrom: { default: '' },
+          visible:      { default: true },
         },
       })
+
+      // UrlNode — URL text lives in block.content. No attrs (mirrors UrlNode.addAttributes → {})
       context.registerBlockSchema({
         name: 'url',
-        attrs: {
-          content: { default: '' },
-        },
-      })
-      context.registerBlockSchema({
-        name: 'headers-table',
         attrs: {},
       })
-      context.registerBlockSchema({
-        name: 'query-table',
-        attrs: {},
-      })
-      context.registerBlockSchema({
-        name: 'path-table',
-        attrs: {},
-      })
+
+      // Table nodes — all share the same importedFrom attr (mirrors Table.tsx createXxxTableNodeView)
+      context.registerBlockSchema({ name: 'headers-table', attrs: { importedFrom: { default: '' } } })
+      context.registerBlockSchema({ name: 'query-table',   attrs: { importedFrom: { default: '' } } })
+      context.registerBlockSchema({ name: 'path-table',    attrs: { importedFrom: { default: '' } } })
+
+      // Body nodes — mirrors JsonNode / XMLNode / YmlNode addAttributes()
       context.registerBlockSchema({
         name: 'json_body',
         attrs: {
-          body:        { default: '' },
-          contentType: { default: 'application/json' },
+          body:         { default: '{\n  \n}' },
+          contentType:  { default: 'application/json' },
+          importedFrom: { default: undefined },
         },
       })
       context.registerBlockSchema({
         name: 'xml_body',
         attrs: {
-          body:        { default: '' },
-          contentType: { default: 'application/xml' },
+          body:         { default: '' },
+          contentType:  { default: 'application/xml' },
+          importedFrom: { default: undefined },
         },
       })
       context.registerBlockSchema({
         name: 'yml_body',
         attrs: {
-          body:        { default: '' },
-          contentType: { default: 'application/x-yaml' },
+          body:         { default: '' },
+          contentType:  { default: 'application/x-yaml' },
+          importedFrom: { default: undefined },
         },
       })
 
