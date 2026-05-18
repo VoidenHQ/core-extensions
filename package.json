@@ -1,6 +1,6 @@
 {
   "name": "@voiden/core-extensions",
-  "version": "0.1.0",
+  "version": "0.1.3",
   "description": "Core extensions bundled with Voiden",
   "type": "module",
   "publishConfig": {
@@ -8,6 +8,9 @@
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "files": [
+    "dist/**"
+  ],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
