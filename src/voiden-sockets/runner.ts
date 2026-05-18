@@ -115,8 +115,12 @@ const createSocketsRunner: RunnerFactory = (context: RunnerContext) => {
             durationMs: result.durationMs,
             ...(result.error ? { error: result.error } : {}),
           }
-          response.status    = result.connected ? 101 : 0
-          response.statusText = result.connected ? 'Switching Protocols' : (result.error ?? 'Connection Failed')
+          const res = response as any
+          res.statusCode    = result.connected ? 101 : 0
+          res.statusMessage = result.connected ? 'Switching Protocols' : (result.error ?? 'Connection Failed')
+          // Backward-compat for older executors/runners
+          res.status    = res.statusCode
+          res.statusText = res.statusMessage
           response.body          = JSON.stringify(report, null, 2)
           // response.contentType   = 'application/json' // CliResponseState doesn't have contentType
           if (response.metadata) delete response.metadata.handoff
@@ -139,8 +143,12 @@ const createSocketsRunner: RunnerFactory = (context: RunnerContext) => {
             ...(grpcConfig?.method  ? { method:  grpcConfig.method  } : {}),
             ...(result.error ? { error: result.error } : {}),
           }
-          response.status    = result.connected ? 200 : 0
-          response.statusText = result.connected ? 'Connected' : (result.error ?? 'Connection Failed')
+          const res = response as any
+          res.statusCode    = result.connected ? 200 : 0
+          res.statusMessage = result.connected ? 'Connected' : (result.error ?? 'Connection Failed')
+          // Backward-compat
+          res.status    = res.statusCode
+          res.statusText = res.statusMessage
           response.body          = JSON.stringify(report, null, 2)
           // response.contentType   = 'application/json'
           if (response.metadata) delete response.metadata.handoff
