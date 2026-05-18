@@ -19,6 +19,12 @@
       "import": "./dist/registry.js",
       "default": "./dist/registry.js"
     },
+    "./registry.js": {
+      "types": "./dist/registry.d.ts",
+      "import": "./dist/registry.js",
+      "default": "./dist/registry.js"
+    },
+    "./src/*": "./src/*",
     "./main": {
       "types": "./dist/main.d.ts",
       "import": "./dist/main.js",
