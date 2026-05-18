@@ -259,7 +259,7 @@ export const createProtoFileNode = (NodeViewWrapper: any) => {
 
         return (
             <NodeViewWrapper contentEditable={false}>
-                <div className="border border-stone-700/80 rounded bg-bg p-3 my-2 select-none">
+                <div className="border border-border rounded bg-bg p-3 my-2 select-none">
                     {!node.attrs.fileName ? (
                         <div className="py-2">
                             <input
@@ -325,7 +325,7 @@ export const createProtoFileNode = (NodeViewWrapper: any) => {
                                             <select
                                                 value={node.attrs.selectedService || ''}
                                                 onChange={handleServiceChange}
-                                                className="w-full text-sm bg-bg text-text border border-stone-700/80 rounded px-2 py-1 focus:outline-none focus:border-stone-500"
+                                                className="w-full text-sm bg-bg text-text border border-border rounded px-2 py-1 focus:outline-none focus:border-stone-500"
                                             >
                                                 <option value="">Select service</option>
                                                 {node.attrs.services.map((service: ProtoService) => (
@@ -342,7 +342,7 @@ export const createProtoFileNode = (NodeViewWrapper: any) => {
                                                 <select
                                                     value={node.attrs.selectedMethod || ''}
                                                     onChange={handleMethodChange}
-                                                    className="w-full text-sm bg-bg text-text border border-stone-700/80 rounded px-2 py-1 focus:outline-none focus:border-stone-500"
+                                                    className="w-full text-sm bg-bg text-text border border-border rounded px-2 py-1 focus:outline-none focus:border-stone-500"
                                                 >
                                                     <option value="">Select method</option>
                                                     {selectedServiceData.methods.map((method: ProtoMethod) => (
@@ -356,7 +356,7 @@ export const createProtoFileNode = (NodeViewWrapper: any) => {
                                     </div>
 
                                     {selectedMethodData && (
-                                        <div className="border border-stone-700/50 rounded p-2 bg-stone-900/30">
+                                        <div className="border border-border rounded p-2 bg-stone-900/30">
                                             <div className="flex items-center gap-2 mb-1">
                                                 <span className="text-xs font-medium text-comment">Call Type:</span>
                                                 <span className="text-xs px-2 py-0.5 rounded bg-stone-700 text-text font-mono">

@@ -9,6 +9,73 @@ import { createGrpcMessagesNode } from './nodes/gRPCMessageNode';
 import manifest from "./manifest.json";
 import { socketHistoryAdapter } from './historyAdapter';
 
+// ─── gRPC config type ────────────────────────────────────────────────────────
+
+interface GrpcConfig {
+  fileName: string;
+  filePath: string;
+  service: string;
+  package: string;
+  method: string;
+  callType: 'unary' | 'server_streaming' | 'client_streaming' | 'bidirectional_streaming';
+  requestType: string;
+  responseType: string;
+}
+
+// ─── Socket-specific helpers ─────────────────────────────────────────────────
+
+function getSocketMethod(editorJson: any): string {
+  const socketNode = editorJson.content?.find((n: any) => n.type === 'socket-request');
+  return socketNode?.content?.find((n: any) => n.type === 'smethod')?.content?.[0]?.text || 'GET';
+}
+
+function getSocketUrl(editorJson: any): string {
+  const socketNode = editorJson.content?.find((n: any) => n.type === 'socket-request');
+  return socketNode?.content?.find((n: any) => n.type === 'surl')?.content?.[0]?.text || '';
+}
+
+function getGrpcConfig(editorJson: any): GrpcConfig | null {
+  const protoNode = editorJson.content
+    ?.find((n: any) => n.type === 'socket-request')
+    ?.content?.find((n: any) => n.type === 'proto');
+
+  if (!protoNode?.attrs) return null;
+
+  const { fileName, selectedService, packageName, selectedMethod, callType, services } = protoNode.attrs;
+  if (!fileName || !selectedService || !selectedMethod) return null;
+
+  const service = services?.find((s: any) => s.name === selectedService);
+  const method = service?.methods?.find((m: any) => m.name === selectedMethod);
+
+  return {
+    fileName,
+    package: packageName,
+    filePath: protoNode.attrs.filePath || fileName,
+    service: selectedService,
+    method: selectedMethod,
+    callType: callType || method?.callType || 'unary',
+    requestType: method?.request || '',
+    responseType: method?.response || '',
+  };
+}
+
+function getGrpcMetadata(editorJson: any): Record<string, string> {
+  const metadata: Record<string, string> = {};
+  editorJson.content?.forEach((node: any) => {
+    if (node.type !== 'headers-table') return;
+    node.content?.forEach((tableNode: any) => {
+      if (tableNode.type !== 'table') return;
+      tableNode.content?.forEach((rowNode: any) => {
+        if (rowNode.type !== 'tableRow' || rowNode.attrs?.disabled) return;
+        const key = (rowNode.content?.[0]?.content?.[0]?.content?.[0]?.text || '').trim();
+        const value = (rowNode.content?.[1]?.content?.[0]?.content?.[0]?.text || '').trim();
+        if (key && value) metadata[key] = value;
+      });
+    });
+  });
+  return metadata;
+}
+
 // Captured proto services from the most recent gRPC build request — injected into the response doc.
 let _pendingProtoServices: any[] | null = null;
 
@@ -153,9 +220,19 @@ export default function createSocketPlugin(context: PluginContext) {
             return request;
           }
 
-          // Dynamic import of getRequest function from app
+          // Import generic core helpers (headers, auth, table reading)
           // @ts-ignore - Path resolved at runtime in app context
-          const { getRequest } = await import(/* @vite-ignore */ '@/core/request-engine/getRequestFromJson');
+          const { buildHeadersWithCookies, getTable, parseAuthNode } = await import(/* @vite-ignore */ '@/core/request-engine/getRequestFromJson');
+
+          // Read the gRPC payload from the json_body node.
+          // json_body is owned by voiden-rest-api but is also reused for gRPC payload editing.
+          // We read it directly here to avoid a cross-plugin runtime dependency.
+          const readGrpcBody = (doc: any): string => {
+            const node = doc.content?.find((n: any) => n.type === 'json_body');
+            return node?.attrs?.body || '';
+          };
+
+          const method = getSocketMethod(editorJson).toLowerCase();
 
           // Capture proto services for injection into the response doc
           try {
@@ -166,12 +243,60 @@ export default function createSocketPlugin(context: PluginContext) {
               : null;
           } catch { _pendingProtoServices = null; }
 
-          // Build socket request from editor JSON
-          // getRequest will detect socket-request nodes and build appropriate request
-          const builtRequest = await getRequest(editorJson, undefined, undefined);
+          const auth = parseAuthNode(editorJson);
+
+          if (method === 'wss' || method === 'ws') {
+            return {
+              ...request,
+              protocolType: 'wss',
+              url: getSocketUrl(editorJson),
+              headers: buildHeadersWithCookies(editorJson, undefined),
+              params: getTable('query-table', editorJson, undefined),
+              auth: auth || request.auth,
+            };
+          }
+
+          // grpc / grpcs
+          const grpcConfig = getGrpcConfig(editorJson);
+
+          if (!grpcConfig) {
+            const { convertResponseToVoidenDocWithGRPCMessageNode } = await import('./lib/responseConverter');
+            const responseDoc = convertResponseToVoidenDocWithGRPCMessageNode({});
+            await context.openVoidenTab('connected', responseDoc, { readOnly: true });
+            throw "gRPC configuration incomplete: proto file, service, or method is not selected.";
+          }
+
+          const url = getSocketUrl(editorJson);
+          const preRequestCodeBlock = editorJson.content?.find((n: any) => n.type === 'pre_request_block')?.attrs?.body;
+          const postRequestCodeBlock = editorJson.content
+            ?.filter((n: any) => n.type === 'post_request_block')
+            ?.map((n: any) => n?.attrs?.body)
+            .join('\n');
+
+          const builtRequest: any = {
+            ...request,
+            protocolType: 'grpc',
+            url,
+            body: readGrpcBody(editorJson),
+            auth: auth || request.auth,
+            prescript: preRequestCodeBlock,
+            postscript: postRequestCodeBlock,
+            grpc: {
+              protoFile: grpcConfig.fileName,
+              protoFilePath: grpcConfig.filePath,
+              package: grpcConfig.package,
+              service: grpcConfig.service,
+              method: grpcConfig.method,
+              callType: grpcConfig.callType,
+              requestType: grpcConfig.requestType,
+              responseType: grpcConfig.responseType,
+              metadata: getGrpcMetadata(editorJson),
+              payload: readGrpcBody(editorJson),
+            },
+          };
 
           // Resolve relative proto file path to absolute so the electron process can find the file
-          if (builtRequest?.grpc?.protoFilePath && !builtRequest.grpc.protoFilePath.startsWith('/')) {
+          if (builtRequest.grpc.protoFilePath && !builtRequest.grpc.protoFilePath.startsWith('/')) {
             try {
               const projectDir = await (window as any).electron?.directories?.getActive();
               if (projectDir) {
@@ -180,23 +305,11 @@ export default function createSocketPlugin(context: PluginContext) {
               }
             } catch { /* keep as-is */ }
           }
-          const { convertResponseToVoidenDocWithGRPCMessageNode } = await import('./lib/responseConverter');
-          let responseDoc;
-          if (!builtRequest.grpc && (builtRequest.protocolType === 'grpc' || builtRequest.protocolType === 'grpcs')) {
-            responseDoc = convertResponseToVoidenDocWithGRPCMessageNode({});
-            await context.openVoidenTab(
-              `connected`,
-              responseDoc,
-              { readOnly: true }
-            );
-            throw "gRPC configuration incomplete: proto file, service, or method is not selected.";
-          } else {
-            return builtRequest;
-          }
+
+          return builtRequest;
         } catch (error) {
           console.error("Error building socket request:", error);
           throw error;
-
         }
       });
 

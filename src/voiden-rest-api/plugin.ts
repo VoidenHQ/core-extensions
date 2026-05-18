@@ -303,24 +303,57 @@ const voidenRestApiPlugin = (context: PluginContext) => {
 
       // Register request building handler
       context.onBuildRequest(async (request, editor) => {
-
         try {
-          // Get the JSON from the editor (linked blocks are already expanded by the orchestrator)
           const editorJson = editor.getJSON();
 
-          // Skip GraphQL documents — the GraphQL plugin handles its own request building
-          if (editorJson.content?.some((n: any) => n.type === 'gqlquery')) {
-            return request;
-          }
+          // Skip GraphQL and socket documents — those plugins handle their own building
+          if (editorJson.content?.some((n: any) => n.type === 'gqlquery')) return request;
+          if (editorJson.content?.some((n: any) => n.type === 'socket-request')) return request;
 
-          // Dynamic import of getRequest function from app
+          // Import generic core helpers (protocol-agnostic)
           // @ts-ignore - Path resolved at runtime in app context
-          const { getRequest } = await import(/* @vite-ignore */ '@/core/request-engine/getRequestFromJson');
+          const coreHelpers = await import(/* @vite-ignore */ '@/core/request-engine/getRequestFromJson');
+          const { getTable, parseAuthNode, buildHeadersWithCookies, findNode, findNodes, createNewRequestObject } = coreHelpers;
 
-          // Build request WITHOUT environment variables
-          // Environment variables will be replaced securely in Electron (Stage 3)
-          // Faker variables will be replaced at Stage 5 (Pre-Send) by the faker extension
-          const builtRequest = await getRequest(editorJson, undefined, undefined);
+          // Import REST-block-specific builders from this plugin — these read json_body,
+          // xml_body, yml_body, multipart-table, url-table, restFile node types.
+          const { buildContentType, buildBodyParams, buildRequestBody, extractBinary } = await import('./lib/requestBuilder');
+
+          // A getTable-compatible wrapper for requestBuilder functions that need it
+          const getTableFn = (type: string, doc: any, env?: Record<string, string>) =>
+            getTable(type as any, doc, env);
+
+          // Read method and URL from the api/request container node
+          const endpointNode = findNode(editorJson, "api") || findNode(editorJson, "request");
+          const method = endpointNode?.content?.find((n: any) => n.type === "method")?.content?.[0]?.text || "GET";
+          const url = endpointNode?.content?.find((n: any) => n.type === "url")?.content?.[0]?.text || "";
+
+          const auth = parseAuthNode(editorJson);
+          const optionsTable = getTable("options-table", editorJson, undefined);
+          const options: Record<string, string> = {};
+          for (const opt of optionsTable) { if (opt.enabled) options[opt.key] = opt.value; }
+
+          const preRequestCodeBlock = findNode(editorJson, "pre_request_block")?.attrs?.body;
+          const postRequestCodeBlock = findNodes(editorJson, "post_request_block")
+            ?.map((n: any) => n?.attrs?.body).join('\n');
+
+          const contentType = buildContentType(editorJson, getTableFn, undefined);
+
+          const builtRequest = {
+            ...createNewRequestObject({ method, url }),
+            protocolType: 'rest',
+            headers: buildHeadersWithCookies(editorJson, undefined),
+            params: getTable("query-table", editorJson, undefined),
+            path_params: getTable("path-table", editorJson, undefined),
+            content_type: contentType,
+            body_params: await buildBodyParams(editorJson, contentType),
+            binary: extractBinary(editorJson),
+            body: buildRequestBody(editorJson, getTableFn, undefined),
+            prescript: preRequestCodeBlock,
+            postscript: postRequestCodeBlock,
+            auth: auth || request.auth,
+            options,
+          };
 
           return builtRequest;
         } catch (error) {

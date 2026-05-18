@@ -68,20 +68,16 @@ export default function createGraphQLPlugin(context: PluginContext) {
           // Get the JSON from the editor (linked blocks are already expanded by the orchestrator)
           const editorJson = editor.getJSON();
 
-
-          // Dynamic import of getRequest function from app
-          // @ts-ignore - Path resolved at runtime in app context
-          const { getRequest } = await import(/* @vite-ignore */ '@/core/request-engine/getRequestFromJson');
-
-          // Build request WITHOUT environment variables
-          // Environment variables will be replaced securely in Electron (Stage 3)
-          // Faker variables will be replaced at Stage 5 (Pre-Send) by the faker extension
-          request = await getRequest(editorJson, undefined, undefined);
           // Only handle documents with a gqlquery node
           const gqlNode = editorJson.content?.find(
             (n: any) => n.type === 'gqlquery'
           );
           if (!gqlNode) return request; // Not a GraphQL doc, pass through
+
+          // Use a fresh base request object — all protocol-specific fields are set below
+          // @ts-ignore - Path resolved at runtime in app context
+          const { createNewRequestObject } = await import(/* @vite-ignore */ '@/core/request-engine/getRequestFromJson');
+          request = createNewRequestObject();
 
           // Support new format (gqlurl/gqlbody children) and old format (direct attrs)
           const gqlBodyChild = gqlNode.content?.find((n: any) => n.type === 'gqlbody');
