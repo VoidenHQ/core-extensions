@@ -242,24 +242,6 @@ export async function postProcessAssertionsHook(context: any): Promise<void> {
       passedAssertions,
       failedAssertions,
     };
-
-    // Also push to reportEntries for CLI/CSV reporting
-    if (!Array.isArray(responseState.metadata.reportEntries)) {
-      responseState.metadata.reportEntries = [];
-    }
-    for (const r of results) {
-      const label = r.assertion?.description?.trim()
-        || `${r.assertion?.field ?? ""}` + (r.assertion?.operator ? ` ${r.assertion.operator} ` : "") + `${r.assertion?.expectedValue ?? ""}`.trim();
-      
-      responseState.metadata.reportEntries.push({
-        type:     "assertion",
-        message:  label || "Assertion",
-        passed:   r.passed,
-        actual:   r.actualValue === undefined && r.error ? `Error: ${r.error}` : r.actualValue,
-        expected: r.assertion?.expectedValue,
-        operator: r.assertion?.operator,
-      });
-    }
   } catch (error) {
     console.error("[Simple Assertions] Error in post-process assertions hook:", error);
   }
