@@ -174,23 +174,43 @@ export const buildBodyParams = async (
         let type: "text" | "file" = "text";
 
         if (nodeType === "multipart-table") {
-          const filePath = valCol.attrs?.file;
-          if (filePath) {
-            value = filePath; type = "file";
-          } else {
-            const fileLinkNode = valCol.content?.[0]?.content?.find((n: JSONContent) => n.type === "fileLink");
-            if (fileLinkNode?.attrs?.filePath) { value = fileLinkNode.attrs.filePath; type = "file"; }
-            else {
-              const fileNode = valCol.content?.[0]?.content?.find((n: JSONContent) => n.type === "file");
-              if (fileNode?.attrs?.filePath) { value = fileNode.attrs.filePath; type = "file"; }
-              else if (fileNode?.attrs?.actualFile) { value = fileNode.attrs.actualFile; type = "file"; }
-              else {
-                const tableFileNode = valCol.content?.[0]?.content?.find((n: JSONContent) => n.type === "table-file");
-                if (tableFileNode?.attrs?.file) { value = tableFileNode.attrs.file; type = "file"; }
-                else { value = ((valCol.content?.[0]?.content?.[0]?.text) || "").trim(); type = "text"; }
-              }
-            }
+          const enabled = !row.attrs?.disabled;
+          // Legacy: single file stored directly in cell attrs
+          const legacyFilePath = valCol.attrs?.file;
+          if (legacyFilePath) {
+            if (key) allBodyParams.push({ enabled, type: "file", key, value: legacyFilePath, importedFrom });
+            continue;
           }
+
+          // Find all file nodes in the cell paragraph (supports multiple attachments per row)
+          const paragraphContent: JSONContent[] = valCol.content?.[0]?.content || [];
+          const fileLinkNodes = paragraphContent.filter(
+            (n: JSONContent) => n.type === "fileLink" && n.attrs?.filePath
+          );
+          const inlineFileNodes = paragraphContent.filter(
+            (n: JSONContent) => n.type === "file" && (n.attrs?.filePath || n.attrs?.actualFile)
+          );
+          const tableFileNodes = paragraphContent.filter(
+            (n: JSONContent) => n.type === "table-file" && n.attrs?.file
+          );
+
+          const allFileNodes = [
+            ...fileLinkNodes.map((n: JSONContent) => n.attrs!.filePath as string),
+            ...inlineFileNodes.map((n: JSONContent) => (n.attrs!.filePath || n.attrs!.actualFile) as string),
+            ...tableFileNodes.map((n: JSONContent) => n.attrs!.file as string),
+          ].filter(Boolean);
+
+          if (allFileNodes.length > 0) {
+            // Emit one BodyParam per file — FormData.append handles same-key multi-file natively
+            for (const fp of allFileNodes) {
+              if (key) allBodyParams.push({ enabled, type: "file", key, value: fp, importedFrom });
+            }
+          } else {
+            // Plain text value
+            const textValue = ((valCol.content?.[0]?.content?.[0]?.text) || "").trim();
+            if (key && textValue) allBodyParams.push({ enabled, type: "text", key, value: textValue, importedFrom });
+          }
+          continue;
         } else {
           value = ((valCol.content?.[0]?.content?.[0]?.text) || "").trim();
           type = "text";
@@ -202,40 +222,52 @@ export const buildBodyParams = async (
     }
   }
 
-  // Local values override imported values per key
+  // Group by key to resolve import vs local conflicts.
+  // File params with the same key are intentional multi-file uploads — keep all.
+  // Text params with the same key: local overrides imported (existing behaviour).
   const paramsByKey = allBodyParams.reduce((acc, param) => {
     const list = acc[param.key] || [];
     list.push(param);
     return { ...acc, [param.key]: list };
   }, {} as Record<string, BodyParam[]>);
 
-  return Object.values(paramsByKey).map((params) => {
-    if (params.length > 1) {
-      const local = params.find((p) => !p.importedFrom);
-      if (local) { const { importedFrom, ...rest } = local; return rest; }
+  return Object.values(paramsByKey).flatMap((params) => {
+    const allFile = params.every((p) => p.type === "file");
+    if (allFile && params.length > 1) {
+      // Multi-file: keep local ones; if all imported, keep all
+      const local = params.filter((p) => !(p as any).importedFrom);
+      const keep = local.length > 0 ? local : params;
+      return keep.map(({ importedFrom, ...rest }: any) => rest);
     }
-    const { importedFrom, ...rest } = params[0];
-    return rest;
+    // Text or single: local overrides imported
+    if (params.length > 1) {
+      const local = params.find((p) => !(p as any).importedFrom);
+      if (local) { const { importedFrom, ...rest } = local as any; return [rest]; }
+    }
+    const { importedFrom, ...rest } = params[0] as any;
+    return [rest];
   });
 };
 
 /**
  * Extract a binary file reference from the restFile node.
  */
-export const extractBinary = (doc: RestDoc): File | string | undefined => {
-  let file: File | string | undefined;
+export const extractBinary = (doc: RestDoc): File | string | string[] | undefined => {
+  const files: (File | string)[] = [];
   doc.content?.forEach((node) => {
     if (node.type === "restFile") {
       node.content?.forEach((child) => {
-        if (child.type === "file" && child.attrs?.filePath) file = child.attrs.filePath;
-        else if (child.type === "fileLink" && child.attrs?.filePath) file = child.attrs.filePath;
+        if (child.type === "fileLink" && child.attrs?.filePath) files.push(child.attrs.filePath);
+        else if (child.type === "file" && child.attrs?.filePath) files.push(child.attrs.filePath);
         else if (child.type === "file" && (child.attrs?.actualFile || child.attrs?.file)) {
-          file = (child.attrs.actualFile as any) || (child.attrs.file as any);
+          files.push((child.attrs.actualFile as any) || (child.attrs.file as any));
         }
       });
     }
   });
-  return file;
+  if (files.length === 0) return undefined;
+  if (files.length === 1) return files[0]; // backward compatible — single file unchanged
+  return files as string[];               // multiple files — callers handle the array case
 };
 
 /**

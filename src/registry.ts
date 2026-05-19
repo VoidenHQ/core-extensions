@@ -433,7 +433,8 @@ export const coreExtensions: ExtensionMetadata[] = [
       "voiden.cancel() to cancel request from pre-script",
       "CodeMirror JavaScript editor with syntax highlighting"
     ],
-    "type": "core"
+    "type": "core",
+    "mainProcess": true
   },
   {
     "id": "voiden-faker",
