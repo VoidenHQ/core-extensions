@@ -32,7 +32,10 @@ export default function createAdvancedAuthPlugin(context: PluginContext) {
 
       // Create node with context components
       const { NodeViewWrapper, RequestBlockHeader } = context.ui.components;
-      const AuthNode = createAuthNode(NodeViewWrapper, RequestBlockHeader, context.project.openFile);
+      type ToastFn = (message: string, type?: 'info' | 'success' | 'warning' | 'error') => void;
+      const showToast: ToastFn = (context.ui as any).showToast?.bind(context.ui) ?? (() => {});
+
+      const AuthNode = createAuthNode(NodeViewWrapper, RequestBlockHeader, context.project.openFile, showToast);
 
       // Register AuthNode
       context.registerVoidenExtension(AuthNode);
@@ -77,10 +80,8 @@ export default function createAdvancedAuthPlugin(context: PluginContext) {
 
               /** Save a token result to runtime variables and patch requestState */
               const saveAndPatch = async (result: any) => {
-                // Save to runtime variables
-                const existing = await (window as any).electron?.variables?.read() || {};
+                // Build only the OAuth-specific vars to merge in
                 const updated: Record<string, any> = {
-                  ...existing,
                   [`${varPrefix}_access_token`]: result.accessToken,
                   [`${varPrefix}_token_type`]: result.tokenType || 'Bearer',
                 };
@@ -111,7 +112,8 @@ export default function createAdvancedAuthPlugin(context: PluginContext) {
                     customParams: auth.config.customParams || '',
                   });
                 }
-                await (window as any).electron?.variables?.writeVariables(JSON.stringify(updated, null, 2));
+                // Use mergeVariables so it only touches the OAuth keys — never restoring user-deleted vars
+                await (window as any).electron?.variables?.mergeVariables(updated);
 
                 // Patch requestState so the current request uses the new token
                 const tokenType = result.tokenType || 'Bearer';
@@ -143,12 +145,9 @@ export default function createAdvancedAuthPlugin(context: PluginContext) {
                 }
               };
 
-              // ── Auto-Acquire: get a token if none exists ─────────────
-              const existingToken = await (window as any).electron?.variables?.get(`${varPrefix}_access_token`);
-              if (!existingToken) {
+              // ── Acquire: fetch a fresh token via the configured grant type ──
+              const acquireToken = async () => {
                 const grantType = auth.config.grantType || 'authorization_code';
-
-                // Resolve process variables in config fields
                 const tokenUrl = await resolveProcessVars(auth.config.tokenUrl || '');
                 const clientId = await resolveProcessVars(auth.config.clientId || '');
                 const clientSecret = await resolveProcessVars(auth.config.clientSecret || '');
@@ -161,7 +160,8 @@ export default function createAdvancedAuthPlugin(context: PluginContext) {
                   case 'authorization_code': {
                     const authUrl = await resolveProcessVars(auth.config.authUrl || '');
                     const callbackUrl = await resolveProcessVars(auth.config.callbackUrl || '');
-                    if (!authUrl || !tokenUrl || !clientId) break;
+                    const missing = [...(!authUrl ? ['Auth URL'] : []), ...(!tokenUrl ? ['Token URL'] : []), ...(!clientId ? ['Client ID'] : [])];
+                    if (missing.length > 0) { showToast(`OAuth2: Authorization Code flow requires ${missing.join(', ')}`, 'error'); break; }
                     const codeVerifier = generateCodeVerifier();
                     const codeChallenge = await generateCodeChallenge(codeVerifier);
                     const state = (await resolveProcessVars(auth.config.state || '')) || generateState();
@@ -176,7 +176,8 @@ export default function createAdvancedAuthPlugin(context: PluginContext) {
                   case 'implicit': {
                     const authUrl = await resolveProcessVars(auth.config.authUrl || '');
                     const callbackUrl = await resolveProcessVars(auth.config.callbackUrl || '');
-                    if (!authUrl || !clientId) break;
+                    const missing = [...(!authUrl ? ['Auth URL'] : []), ...(!clientId ? ['Client ID'] : [])];
+                    if (missing.length > 0) { showToast(`OAuth2: Implicit flow requires ${missing.join(', ')}`, 'error'); break; }
                     const state = (await resolveProcessVars(auth.config.state || '')) || generateState();
                     result = await ipc('oauth2:startImplicitFlow', {
                       authUrl, clientId, scope,
@@ -188,7 +189,8 @@ export default function createAdvancedAuthPlugin(context: PluginContext) {
                   case 'password': {
                     const username = await resolveProcessVars(auth.config.username || '');
                     const password = await resolveProcessVars(auth.config.password || '');
-                    if (!tokenUrl || !clientId) break;
+                    const missing = [...(!tokenUrl ? ['Token URL'] : []), ...(!clientId ? ['Client ID'] : [])];
+                    if (missing.length > 0) { showToast(`OAuth2: Password flow requires ${missing.join(', ')}`, 'error'); break; }
                     result = await ipc('oauth2:passwordGrant', {
                       tokenUrl, clientId, clientSecret: clientSecret || undefined,
                       username, password, scope, clientAuthMethod, customParams,
@@ -196,7 +198,8 @@ export default function createAdvancedAuthPlugin(context: PluginContext) {
                     break;
                   }
                   case 'client_credentials': {
-                    if (!tokenUrl || !clientId) break;
+                    const missing = [...(!tokenUrl ? ['Token URL'] : []), ...(!clientId ? ['Client ID'] : [])];
+                    if (missing.length > 0) { showToast(`OAuth2: Client Credentials flow requires ${missing.join(', ')}`, 'error'); break; }
                     result = await ipc('oauth2:clientCredentialsGrant', {
                       tokenUrl, clientId, clientSecret,
                       scope, clientAuthMethod, customParams,
@@ -208,32 +211,53 @@ export default function createAdvancedAuthPlugin(context: PluginContext) {
                 if (result?.accessToken) {
                   await saveAndPatch(result);
                   console.log(`[OAuth2 Auto-Acquire] Token acquired for prefix "${varPrefix}" (${grantType})`);
+                } else if (result !== undefined) {
+                  const detail = result?.error_description || result?.error || result?.message;
+                  showToast(`OAuth2: Token request failed${detail ? ` — ${detail}` : ''}`, 'error');
                 }
-                return; // acquired fresh token, no need to check refresh
+              };
+
+              // ── Auto-Acquire: no token stored yet ────────────────────
+              const existingToken = await (window as any).electron?.variables?.get(`${varPrefix}_access_token`);
+              if (!existingToken) {
+                await acquireToken();
+                return;
               }
 
-              // ── Auto-Refresh: refresh expired tokens ─────────────────
-              if (!auth.config?.autoRefresh) return;
-
-              // Check if token is expired
+              // ── Auto-Refresh: token exists but may be expired ─────────
               const expiresAt = await (window as any).electron?.variables?.get(`${varPrefix}_expires_at`);
-              if (!expiresAt || Date.now() < Number(expiresAt)) return; // not expired
+              const isExpired = expiresAt && Date.now() >= Number(expiresAt);
 
-              // Check if we have a refresh token
+              if (!isExpired) return;
+
+              if (!auth.config?.autoRefresh) {
+                await (window as any).electron?.variables?.deleteKey?.(`${varPrefix}_access_token`);
+                await (window as any).electron?.variables?.deleteKey?.(`${varPrefix}_expires_at`);
+                await acquireToken();
+                return;
+              }
+
               const storedRefreshToken = await (window as any).electron?.variables?.get(`${varPrefix}_refresh_token`);
-              if (!storedRefreshToken) return;
+              if (!storedRefreshToken) {
+                await (window as any).electron?.variables?.deleteKey?.(`${varPrefix}_access_token`);
+                await (window as any).electron?.variables?.deleteKey?.(`${varPrefix}_expires_at`);
+                await acquireToken();
+                return;
+              }
 
-              // Get refresh config from runtime variables (saved by Get Token or auto-acquire)
               const rawRefreshConfig = await (window as any).electron?.variables?.get(`${varPrefix}_refresh_config`);
               let refreshConfig: any;
               try {
-                refreshConfig = typeof rawRefreshConfig === 'string'
-                  ? JSON.parse(rawRefreshConfig)
-                  : rawRefreshConfig;
-              } catch { return; }
-              if (!refreshConfig) return;
+                refreshConfig = typeof rawRefreshConfig === 'string' ? JSON.parse(rawRefreshConfig) : rawRefreshConfig;
+              } catch {
+                showToast('OAuth2: Cannot refresh token — stored refresh config is invalid, re-authorize to get a new token', 'warning');
+                return;
+              }
+              if (!refreshConfig) {
+                showToast('OAuth2: Cannot refresh token — no refresh config found, re-authorize to get a new token', 'warning');
+                return;
+              }
 
-              // Refresh the token via Electron IPC
               const refreshResult = await ipc('oauth2:refreshToken', {
                 tokenUrl: refreshConfig.tokenUrl || '',
                 clientId: refreshConfig.clientId || '',
@@ -247,15 +271,53 @@ export default function createAdvancedAuthPlugin(context: PluginContext) {
               if (refreshResult?.accessToken) {
                 await saveAndPatch(refreshResult);
                 console.log(`[OAuth2 Auto-Refresh] Token refreshed for prefix "${varPrefix}"`);
+              } else {
+                const detail = refreshResult?.error_description || refreshResult?.error || refreshResult?.message;
+                showToast(`OAuth2: Token refresh failed${detail ? ` — ${detail}` : ''}`, 'error');
               }
-            } catch (err) {
-              console.warn('[OAuth2 Auto-Refresh] Failed:', err);
+            } catch (err: any) {
+              const raw = err?.message || String(err);
+              const message = raw.replace(/^Error invoking remote method '[^']*':\s*/i, '');
+              showToast(`OAuth2: ${message}`, 'error');
+              console.warn('[OAuth2] Hook error:', err);
             }
           },
           5, // high priority – runs before scripting hooks
         );
       } catch (err) {
         console.warn('[voiden-advanced-auth] Failed to register auto-refresh hook:', err);
+      }
+
+      // ── OAuth2 401 Detection Hook ─────────────────────────────────
+      try {
+        // @ts-ignore
+        const { hookRegistry: hookRegistry401 } = await import(/* @vite-ignore */ '@/core/request-engine/pipeline');
+        hookRegistry401.registerHook(
+          'voiden-advanced-auth',
+          'post-processing' as any,
+          (ctx: any) => {
+            try {
+              const auth = ctx?.requestState?.auth;
+              if (!auth?.enabled || auth.type !== 'oauth2') return;
+              const status = ctx?.responseState?.status;
+              if (status === 401) {
+                const varPrefix = auth.config?.variablePrefix || 'oauth2';
+                const hasAutoRefresh = auth.config?.autoRefresh === true;
+                showToast(
+                  hasAutoRefresh
+                    ? 'OAuth2: 401 Unauthorized — token may be revoked, re-authorize to get a new token'
+                    : 'OAuth2: 401 Unauthorized — token is expired or invalid, re-authorize to get a new token',
+                  'warning',
+                );
+                (window as any).electron?.variables?.deleteKey?.(`${varPrefix}_access_token`);
+                (window as any).electron?.variables?.deleteKey?.(`${varPrefix}_expires_at`);
+              }
+            } catch { /* never block the response */ }
+          },
+          5,
+        );
+      } catch (err) {
+        console.warn('[voiden-advanced-auth] Failed to register 401 hook:', err);
       }
 
       // Register linkable node type

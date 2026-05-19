@@ -1,6 +1,6 @@
 import { mergeAttributes, Node } from "@tiptap/core";
 import { ReactNodeViewRenderer } from "@tiptap/react";
-import React, { useCallback, useEffect } from "react";
+import { useCallback, useEffect } from "react";
 import { ExternalLink } from "lucide-react";
 
 // Type definitions
@@ -41,8 +41,6 @@ async function resolveProtoPath(filePath: string | null): Promise<string | null>
  */
 export const createProtoFileNode = (NodeViewWrapper: any) => {
     const ProtoFileComponent = ({ node, updateAttributes }: any) => {
-        const fileInputRef = React.useRef<HTMLInputElement>(null);
-        const [fileHandle, setFileHandle] = React.useState<File | null>(null);
 
         const determineCallType = (methodSignature: string): GrpcCallType => {
             const hasStreamRequest = /stream\s+\w+/.test(methodSignature.split('returns')[0]);
@@ -93,9 +91,9 @@ export const createProtoFileNode = (NodeViewWrapper: any) => {
             return { packageName, services };
         };
 
-        // Auto-load proto services from filePath when services are missing and no in-memory file handle
+        // Auto-load proto services from filePath when services are missing
         useEffect(() => {
-            if (!node.attrs.fileName || node.attrs.services.length > 0 || fileHandle) return;
+            if (!node.attrs.fileName || node.attrs.services.length > 0) return;
             (async () => {
                 try {
                     const resolvedPath = await resolveProtoPath(node.attrs.filePath);
@@ -147,58 +145,41 @@ export const createProtoFileNode = (NodeViewWrapper: any) => {
                     console.error('[ProtoSelectorNode] Auto-load failed:', err);
                 }
             })();
-        }, [node.attrs.fileName, node.attrs.services.length, fileHandle]);
+        }, [node.attrs.fileName, node.attrs.services.length]);
 
-        useEffect(() => {
-            if (node.attrs.fileName && node.attrs.services.length === 0 && fileHandle) {
-                loadFileContent(fileHandle);
-            }
-        }, [node.attrs.fileName, node.attrs.services.length, fileHandle]);
-
-        const loadFileContent = async (file: File) => {
+        const handleFileSelect = useCallback(async () => {
+            // Use Electron's native dialog to get the full absolute path — the HTML
+            // input's File.path is unreliable and may only carry the filename.
             try {
-                const content = await file.text();
-                const { packageName, services } = parseProtoFile(content);
-
-                updateAttributes({
-                    packageName,
-                    services,
-                    selectedService: services.length > 0 ? services[0].name : null,
-                    selectedMethod: services.length > 0 && services[0].methods.length > 0 ? services[0].methods[0].name : null,
-                    callType: services.length > 0 && services[0].methods.length > 0 ? services[0].methods[0].callType : null,
+                const filePaths: string[] = await (window as any).electron?.dialog?.openFile({
+                    properties: ['openFile'],
+                    filters: [{ name: 'Proto Files', extensions: ['proto'] }],
                 });
-            } catch (error) {
-                console.error('Error reading proto file:', error);
-                alert('Failed to read proto file');
-            }
-        };
+                if (!filePaths?.length) return;
 
-        const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-            const file = e.target.files?.[0];
-            if (!file) return;
+                const absolutePath = filePaths[0];
+                const fileName = absolutePath.split('/').pop() || absolutePath.split('\\').pop() || absolutePath;
 
-            if (!file.name.endsWith('.proto')) {
-                alert('Please upload a .proto file');
-                return;
-            }
+                const content: string = await (window as any).electron?.files?.read(absolutePath);
+                if (!content) return;
 
-            setFileHandle(file);
-
-            try {
-                const content = await file.text();
                 const { packageName, services } = parseProtoFile(content);
-                const electronFile = file as File & { path?: string };
-                let storedPath = electronFile.path || electronFile.webkitRelativePath || file.name;
-                // Store relative path if the file is inside the active project directory
+
+                // Relativize the path against the project root so the path is portable
+                // across machines and can be committed to git.
+                let storedPath = absolutePath;
                 try {
                     const projectDir = await (window as any).electron?.directories?.getActive();
-                    if (projectDir && storedPath.startsWith(projectDir)) {
+                    if (projectDir) {
                         const withSep = projectDir.endsWith('/') ? projectDir : projectDir + '/';
-                        storedPath = storedPath.slice(withSep.length);
+                        if (absolutePath.startsWith(withSep)) {
+                            storedPath = absolutePath.slice(withSep.length);
+                        }
                     }
                 } catch { /* keep absolute */ }
+
                 updateAttributes({
-                    fileName: file.name,
+                    fileName,
                     filePath: storedPath,
                     packageName,
                     services,
@@ -208,7 +189,6 @@ export const createProtoFileNode = (NodeViewWrapper: any) => {
                 });
             } catch (error) {
                 console.error('Error reading proto file:', error);
-                alert('Failed to read proto file');
             }
         }, [updateAttributes]);
 
@@ -262,18 +242,10 @@ export const createProtoFileNode = (NodeViewWrapper: any) => {
                 <div className="border border-border rounded bg-bg p-3 my-2 select-none">
                     {!node.attrs.fileName ? (
                         <div className="py-2">
-                            <input
-                                ref={fileInputRef}
-                                type="file"
-                                accept=".proto"
-                                onChange={handleFileSelect}
-                                className="hidden"
-                                id="proto-file-input"
-                            />
                             <button
                                 type="button"
                                 className="text-sm text-accent hover:text-accent/80 underline decoration-accent/50 hover:decoration-accent transition-colors cursor-pointer"
-                                onClick={() => fileInputRef.current?.click()}
+                                onClick={handleFileSelect as any}
                             >
                                 Import proto file
                             </button>
@@ -309,8 +281,6 @@ export const createProtoFileNode = (NodeViewWrapper: any) => {
                                             selectedMethod: null,
                                             callType: null,
                                         });
-                                        setFileHandle(null);
-                                        if (fileInputRef.current) fileInputRef.current.value = '';
                                     }}
                                 >
                                     Remove

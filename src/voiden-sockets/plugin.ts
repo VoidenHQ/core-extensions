@@ -26,7 +26,8 @@ interface GrpcConfig {
 
 function getSocketMethod(editorJson: any): string {
   const socketNode = editorJson.content?.find((n: any) => n.type === 'socket-request');
-  return socketNode?.content?.find((n: any) => n.type === 'smethod')?.content?.[0]?.text || 'GET';
+  const smethodNode = socketNode?.content?.find((n: any) => n.type === 'smethod');
+  return smethodNode?.content?.[0]?.text || smethodNode?.attrs?.method || 'GET';
 }
 
 function getSocketUrl(editorJson: any): string {
@@ -157,13 +158,14 @@ export default function createSocketPlugin(context: PluginContext) {
         try {
           // Capture the source .void file path BEFORE switching to the connected tab
           let sourceFilePath: string | null = null;
+          let capturedTabId: string | null = null;
           try {
             // @ts-ignore
             const { useResponseStore } = await import(/* @vite-ignore */ '@/core/request-engine/stores/responseStore');
-            const tabId = useResponseStore.getState().currentRequestTabId;
-            if (tabId) {
+            capturedTabId = useResponseStore.getState().currentRequestTabId;
+            if (capturedTabId) {
               const panelData = await (window as any).electron?.state?.getPanelTabs('main');
-              const tab = (panelData?.tabs as any[])?.find((t: any) => t.id === tabId && t.type === 'document');
+              const tab = (panelData?.tabs as any[])?.find((t: any) => t.id === capturedTabId && t.type === 'document');
               sourceFilePath = tab?.source ?? null;
             }
           } catch { /* best-effort */ }
@@ -178,6 +180,20 @@ export default function createSocketPlugin(context: PluginContext) {
               wsId: response.wsId || '',
             });
           } else {
+            // If there is no grpcId the connection failed before it was established —
+            // clear the loading state and surface the actual error instead of opening
+            // a broken tab with the "no identifier provided" message.
+            if (!response.grpcId) {
+              try {
+                // @ts-ignore
+                const { useResponseStore } = await import(/* @vite-ignore */ '@/core/request-engine/stores/responseStore');
+                useResponseStore.getState().setError(
+                  capturedTabId,
+                  response.error || 'gRPC connection could not be established'
+                );
+              } catch { /* best-effort */ }
+              return;
+            }
             const capturedServices = _pendingProtoServices;
             _pendingProtoServices = null;
             responseDoc = convertResponseToVoidenDocWithGRPCMessageNode({
