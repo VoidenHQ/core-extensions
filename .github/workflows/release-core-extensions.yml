@@ -1,0 +1,71 @@
+# Builds per-plugin ESM bundles and publishes them as GitHub Release assets.
+#
+# Trigger: push a tag like core-ext-v1.0.0
+#   git tag core-ext-v1.0.0 && git push origin core-ext-v1.0.0
+#
+# Each plugin gets its own .js file so the Voiden app can download only
+# the plugins that changed, rather than re-downloading the full bundle.
+#
+# Assets uploaded per release:
+#   manifest.json          — version index (which plugins are at what version)
+#   voiden-rest-api.js     — individual plugin bundles
+#   voiden-graphql.js
+#   ... (one per plugin)
+
+name: Release Core Extensions
+
+on:
+  push:
+    tags:
+      - 'core-ext-v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build & Publish Plugin Bundles
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Enable Corepack (Yarn)
+        run: corepack enable
+
+      - name: Install dependencies
+        run: yarn install --immutable
+
+      - name: Build TypeScript (registry + types)
+        run: yarn build
+
+      - name: Build per-plugin ESM bundles
+        run: yarn build:bundles
+
+      - name: Generate release manifest
+        run: yarn generate-release-manifest
+
+      - name: List built assets
+        run: ls -lh dist-bundles/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Core Extensions ${{ github.ref_name }}
+          body: |
+            ### Core Extension Bundles
+
+            The Voiden app will automatically detect and download updated plugins on next launch.
+
+            **Included plugins:**
+            See `manifest.json` for the full list and individual plugin versions.
+          files: |
+            dist-bundles/manifest.json
+            dist-bundles/*.js

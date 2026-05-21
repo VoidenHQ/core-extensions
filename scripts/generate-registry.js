@@ -1,8 +1,13 @@
 #!/usr/bin/env node
 /**
- * Auto-generates extension registry from manifest.json files
- * This script scans src/ for extension folders with manifest.json
- * and creates a registry that can be imported by the electron app
+ * Auto-generates extension registry from manifest.json files.
+ * Reads bundle-config.jsonc to decide which plugins are compiled into the app
+ * (bundled) vs. fetched from GitHub Releases at runtime (unbundled).
+ *
+ * Outputs:
+ *   src/registry.ts       — metadata for ALL plugins (bundled + unbundled)
+ *   src/plugins.ts        — imports only for BUNDLED plugins
+ *   src/main-plugins.ts   — imports only for BUNDLED plugins with main-process.ts
  */
 
 import fs from 'fs';
@@ -14,6 +19,42 @@ const __dirname = path.dirname(__filename);
 
 const SRC_DIR = path.join(__dirname, '../src');
 const OUTPUT_FILE = path.join(__dirname, '../src/registry.ts');
+const BUNDLE_CONFIG_PATH = path.join(__dirname, '../bundle-config.jsonc');
+
+// ── JSONC parser (strips // and /* */ comments + trailing commas) ─────────────
+function parseJsonc(filePath) {
+  if (!fs.existsSync(filePath)) return null;
+  const raw = fs.readFileSync(filePath, 'utf8');
+  const stripped = raw
+    .replace(/\/\/[^\n]*/g, '')           // remove // comments
+    .replace(/\/\*[\s\S]*?\*\//g, '')    // remove /* */ comments
+    .replace(/,(\s*[}\]])/g, '$1');      // remove trailing commas
+  try {
+    return JSON.parse(stripped);
+  } catch (err) {
+    console.error('✗ Failed to parse bundle-config.jsonc:', err.message);
+    process.exit(1);
+  }
+}
+
+// ── Bundle config ─────────────────────────────────────────────────────────────
+const bundleConfig = parseJsonc(BUNDLE_CONFIG_PATH);
+
+/**
+ * Returns true if the plugin should be compiled into the app bundle.
+ *
+ * Rules (when bundle-config.jsonc exists):
+ *   - Plugin listed as `true`  → bundled
+ *   - Plugin listed as `false` → unbundled
+ *   - Plugin not listed at all → unbundled (explicit opt-in required)
+ *
+ * If bundle-config.jsonc does not exist every plugin is bundled (safe default).
+ */
+function isBundled(pluginId) {
+  if (!bundleConfig) return true;
+  const plugins = bundleConfig.plugins ?? {};
+  return plugins[pluginId] === true;
+}
 
 function findExtensionManifests(dir) {
   const extensions = [];
@@ -56,23 +97,27 @@ function findExtensionManifests(dir) {
 }
 
 function generateRegistry(extensions) {
-  const imports = extensions
-    .map((ext, index) => `import ${ext.folder.replace(/-/g, '_')}Plugin from './${ext.folder}';`)
-    .join('\n');
+  const now = new Date().toISOString();
 
-  const registry = extensions.map((ext) => ({
-    ...ext.manifest,
-    // Export field to map to the imported plugin
-    _pluginExport: ext.folder.replace(/-/g, '_') + 'Plugin'
-  }));
+  // Split into bundled (compiled into app) and unbundled (fetched at runtime)
+  const bundled   = extensions.filter(ext => isBundled(ext.manifest.id));
+  const unbundled = extensions.filter(ext => !isBundled(ext.manifest.id));
 
-  // Generate metadata-only export (no plugin imports - safe for Electron main process)
+  // Print a summary so the developer can see what's happening
+  console.log(`\n  Bundled   (${bundled.length}): ${bundled.map(e => e.manifest.id).join(', ') || '—'}`);
+  if (unbundled.length > 0) {
+    console.log(`  Unbundled (${unbundled.length}): ${unbundled.map(e => e.manifest.id).join(', ')}`);
+    console.log(`  ↳ Unbundled plugins will be fetched from GitHub Releases on first app launch.\n`);
+  } else {
+    console.log();
+  }
+
+  // registry.ts — metadata for ALL plugins (the app needs to know they exist)
   const metadataOnly = extensions.map(ext => ext.manifest);
-
   const registryCode = `/**
  * Auto-generated extension registry
  * DO NOT EDIT MANUALLY - run 'yarn generate-registry' to update
- * Generated on: ${new Date().toISOString()}
+ * Generated on: ${now}
  */
 
 export interface ExtensionMetadata {
@@ -94,34 +139,43 @@ export interface ExtensionMetadata {
 }
 
 // Metadata-only export for Electron main process (no React/DOM dependencies)
+// Includes ALL core extensions — both bundled and unbundled.
 export const coreExtensions: ExtensionMetadata[] = ${JSON.stringify(metadataOnly, null, 2)};
 `;
 
-  // Generate plugins file with imports (for UI only)
+  // plugins.ts — imports ONLY bundled plugins (reduces app bundle size)
+  const bundledImports = bundled
+    .map(ext => `import ${ext.folder.replace(/-/g, '_')}Plugin from './${ext.folder}';`)
+    .join('\n');
+
   const pluginsCode = `/**
  * Auto-generated plugin map
  * DO NOT EDIT MANUALLY - run 'yarn generate-registry' to update
- * Generated on: ${new Date().toISOString()}
+ * Generated on: ${now}
+ *
+ * Bundled   (${bundled.length}): ${bundled.map(e => e.manifest.id).join(', ') || '—'}
+ * Unbundled (${unbundled.length}): ${unbundled.map(e => e.manifest.id).join(', ') || '—'}
+ * Unbundled plugins are fetched from GitHub Releases — edit bundle-config.jsonc to change this.
  */
 
-${imports}
+${bundledImports}
 
-// Plugin map for UI app (has React/DOM access)
+// Plugin map for the UI app — only bundled plugins appear here.
+// Unbundled plugins are loaded from the local cache (core-extensions-cache in userData).
 export const coreExtensionPlugins: Record<string, any> = {
-${extensions.map(ext => `  '${ext.manifest.id}': ${ext.folder.replace(/-/g, '_')}Plugin`).join(',\n')}
+${bundled.map(ext => `  '${ext.manifest.id}': ${ext.folder.replace(/-/g, '_')}Plugin`).join(',\n')}
 };
 `;
 
-  // Generate main-process plugins file (for Electron main process only)
-  // Only includes extensions that have a main-process.ts file
-  const mainProcessExtensions = extensions.filter(ext =>
+  // main-plugins.ts — imports ONLY bundled plugins that have a main-process.ts
+  const mainProcessExtensions = bundled.filter(ext =>
     fs.existsSync(path.join(SRC_DIR, ext.folder, 'main-process.ts'))
   );
 
   const mainPluginsCode = mainProcessExtensions.length > 0 ? `/**
  * Auto-generated main-process plugin map
  * DO NOT EDIT MANUALLY - run 'yarn generate-registry' to update
- * Generated on: ${new Date().toISOString()}
+ * Generated on: ${now}
  */
 
 ${mainProcessExtensions.map(ext => `import ${ext.folder.replace(/-/g, '_')}MainPlugin from './${ext.folder}/main-process.js';`).join('\n')}
@@ -133,10 +187,10 @@ ${mainProcessExtensions.map(ext => `  '${ext.manifest.id}': ${ext.folder.replace
 ` : `/**
  * Auto-generated main-process plugin map
  * DO NOT EDIT MANUALLY - run 'yarn generate-registry' to update
- * Generated on: ${new Date().toISOString()}
+ * Generated on: ${now}
  */
 
-// No extensions with main-process entry points found
+// No bundled extensions with main-process entry points found
 export const coreMainProcessPlugins: Record<string, any> = {};
 `;
 
@@ -145,6 +199,7 @@ export const coreMainProcessPlugins: Record<string, any> = {};
 
 // Main execution
 const extensions = findExtensionManifests(SRC_DIR);
+console.log(`Generating registry for ${extensions.length} extension(s)...`);
 
 const { registryCode, pluginsCode, mainPluginsCode } = generateRegistry(extensions);
 

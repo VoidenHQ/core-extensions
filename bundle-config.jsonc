@@ -1,0 +1,42 @@
+{
+  // Core Extension Bundle Configuration
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Controls which plugins are compiled directly into the Voiden app bundle.
+  //
+  //   true  → BUNDLED   — Plugin code is included in the app. Works offline,
+  //                        no download required. Increases app binary size.
+  //
+  //   false → UNBUNDLED — Plugin is excluded from the app bundle. It will be
+  //                        fetched from GitHub Releases on first launch and
+  //                        cached locally for subsequent launches.
+  //
+  // To unbundle a plugin, either:
+  //   • Comment the line out with //   → plugin disappears from bundle
+  //   • Change true  →  false          → same effect, line stays visible
+  //
+  // After editing this file run:  yarn generate-registry && yarn build
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  "plugins": {
+    // ── Core request types ────────────────────────────────────────────────────
+    "voiden-rest-api": true,          // HTTP / REST — essential, always bundle
+    "voiden-graphql": true,           // GraphQL support
+    "voiden-sockets-grpcs": true,     // WebSocket + gRPC streaming
+
+    // ── Auth & scripting ──────────────────────────────────────────────────────
+    "voiden-advanced-auth": true,     // OAuth2, AWS Sig4, Digest auth
+    "voiden-scripting": true,         // Pre/post request scripts
+
+    // ── Assertions & testing ──────────────────────────────────────────────────
+    "simple-assertions": true,        // Response assertion blocks
+
+    // ── Data & utilities ──────────────────────────────────────────────────────
+    "voiden-faker": true,             // Fake data generation
+    // "voiden-stitch": true,         // Chain requests — uncomment to bundle
+
+    // ── Documentation & import ───────────────────────────────────────────────
+    "md-preview": true,               // Markdown preview blocks
+    "openapi-import": true,           // Import from OpenAPI / Swagger spec
+    "postman-import": true            // Import from Postman collections
+  }
+}
