@@ -127,20 +127,30 @@
     "zustand": "*"
   },
   "devDependencies": {
+    "@codemirror/autocomplete": "*",
+    "@codemirror/state": "*",
+    "@codemirror/view": "*",
+    "@tanstack/react-query": "*",
     "@tiptap/core": "^2.8.0",
     "@tiptap/pm": "^2.8.0",
     "@tiptap/react": "^2.8.0",
+    "@tiptap/suggestion": "^2.8.0",
     "@types/js-yaml": "^4.0.9",
     "@types/react": "^18.2.15",
     "@types/react-dom": "^18.2.7",
     "@types/selfsigned": "^2.1.0",
     "@types/shell-quote": "^1.7.1",
+    "lucide-react": "*",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
+    "react-markdown": "*",
+    "remark-gfm": "*",
     "sass": "^1.89.2",
+    "tippy.js": "*",
     "typescript": "^5.0.0",
     "undici": "^7.22.0",
-    "vite": "^5.0.0"
+    "vite": "^5.0.0",
+    "zustand": "*"
   },
   "keywords": [
     "voiden",

@@ -124,7 +124,7 @@ export const Preview = ({ tab, className = "" }: { tab: any; className?: string 
           backgroundColor: 'var(--editor-bg)'
         }}
       >
-        <div className="p-2 w-full" style={{ backgroundColor: 'var(--editor-bg)' }}>
+        <div className={`p-2 w-full ${Preview.proseClasses || ""}`} style={{ backgroundColor: 'var(--editor-bg)' }}>
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
             key={tab.tabId}
@@ -138,7 +138,6 @@ export const Preview = ({ tab, className = "" }: { tab: any; className?: string 
               p: ({ children, ...props }) => <Paragraph {...props}>{children}</Paragraph>,
               blockquote: ({ children, ...props }) => <Blockquote {...props}>{children}</Blockquote>,
             }}
-            className={Preview.proseClasses || ""}
           >
             {tab.content}
           </ReactMarkdown>

@@ -4,7 +4,7 @@ import { FAKER_FUNCTIONS, getFakerInsertText } from './fakerEngine';
 /**
  * CodeMirror autocomplete for {{$faker.XXX()}} in code bodies
  */
-export function fakerAutocomplete() {
+export function fakerAutocomplete(): any {
   return autocompletion({
     override: [
       (context: CompletionContext): CompletionResult | null => {

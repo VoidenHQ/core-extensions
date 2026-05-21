@@ -143,7 +143,7 @@ export const MarkdownPreviewPanel = () => {
           backgroundColor: 'var(--editor-bg)'
         }}
       >
-        <div className="p-4 w-full" style={{ backgroundColor: 'var(--editor-bg)' }}>
+        <div className={`p-4 w-full ${MarkdownPreviewPanel.proseClasses || ""}`} style={{ backgroundColor: 'var(--editor-bg)' }}>
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
             components={{
@@ -156,7 +156,6 @@ export const MarkdownPreviewPanel = () => {
               p: ({ children, ...props }) => <Paragraph {...props}>{children}</Paragraph>,
               blockquote: ({ children, ...props }) => <Blockquote {...props}>{children}</Blockquote>,
             }}
-            className={MarkdownPreviewPanel.proseClasses || ""}
           >
             {content}
           </ReactMarkdown>
