@@ -53,6 +53,31 @@ export const Fragment = _s.Fragment;`,
 const _s = window.__voiden_shims__['react-dom/client'];
 export default _s;
 export const { createRoot, hydrateRoot } = _s;`,
+
+    // CodeMirror — must share host instances so extension instanceof checks pass
+    '@codemirror/state': `\
+const _s = window.__voiden_shims__['@codemirror/state'];
+export default _s;
+export const { Extension, RangeSetBuilder, StateField, EditorState, Prec,
+  Annotation, AnnotationType, ChangeDesc, ChangeSet, Compartment, EditorSelection,
+  Facet, Line, MapMode, Range, RangeSet, RangeValue, SelectionRange,
+  StateEffect, StateEffectType, Text, Transaction, combineConfig,
+  countColumn, findClusterBreak, findColumn } = _s;`,
+
+    '@codemirror/view': `\
+const _s = window.__voiden_shims__['@codemirror/view'];
+export default _s;
+export const { keymap, EditorView, Decoration, DecorationSet, WidgetType,
+  ViewPlugin, ViewUpdate, MatchDecorator, GutterMarker,
+  drawSelection, dropCursor, highlightActiveLine, highlightSpecialChars,
+  lineNumbers, rectangularSelection, scrollPastEnd } = _s;`,
+
+    '@codemirror/autocomplete': `\
+const _s = window.__voiden_shims__['@codemirror/autocomplete'];
+export default _s;
+export const { CompletionContext, CompletionResult, autocompletion,
+  completeAnyWord, closeBrackets, closeBracketsKeymap,
+  completionKeymap, ifIn, ifNotIn, snippetCompletion } = _s;`,
   }
 
   // @/core/* modules are always accessed via dynamic import() with destructuring,
@@ -135,15 +160,34 @@ for (const pluginId of plugins) {
           resolveId(id) { if (id.endsWith('.css')) return '\0empty-css' },
           load(id) { if (id === '\0empty-css') return 'export default {}' },
         },
-        // Redirect Node's `buffer` module to globalThis.Buffer (available in Electron)
+        // Redirect Node's `buffer` module to globalThis.Buffer (available in Electron).
+        // enforce:'pre' ensures this runs before Vite's browser-external plugin,
+        // which would otherwise intercept `buffer` first and return an empty module.
         {
           name: 'node-buffer',
+          enforce: 'pre',
           resolveId(id) { if (id === 'buffer') return '\0node-buffer' },
           load(id) {
             if (id === '\0node-buffer') return [
               'export const Buffer = globalThis.Buffer',
               'export default { Buffer: globalThis.Buffer }',
             ].join('\n')
+          },
+        },
+        // Stub out self-imports of @voiden/core-extensions.
+        // The SDK (a dependency) transitively imports the package itself. Since the
+        // dist/ folder doesn't exist in CI (no tsc step), resolution fails. Only
+        // type-level values are imported so an empty stub is safe.
+        {
+          name: 'self-import-stub',
+          enforce: 'pre',
+          resolveId(id) {
+            if (id === '@voiden/core-extensions' || id.startsWith('@voiden/core-extensions/')) {
+              return '\0self-voiden-ext'
+            }
+          },
+          load(id) {
+            if (id === '\0self-voiden-ext') return 'export default {}; export const coreExtensions = []; export const coreExtensionPlugins = {};'
           },
         },
       ],

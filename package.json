@@ -127,9 +127,6 @@
     "zustand": "*"
   },
   "devDependencies": {
-    "@codemirror/autocomplete": "*",
-    "@codemirror/state": "*",
-    "@codemirror/view": "*",
     "@tanstack/react-query": "*",
     "@tiptap/core": "^2.8.0",
     "@tiptap/pm": "^2.8.0",
@@ -141,6 +138,8 @@
     "@types/selfsigned": "^2.1.0",
     "@types/shell-quote": "^1.7.1",
     "lucide-react": "*",
+    "markdown-it": "*",
+    "prosemirror-markdown": "*",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-markdown": "*",

@@ -22,8 +22,8 @@
 // Imports
 // ============================================================================
 
+import type { ImportRequest } from '../lib/parser/types.js';
 import {
-  type ImportRequest,
   convertToHeadersTableNode,
   convertToJsonNode,
   convertToXMLNode,
@@ -35,13 +35,12 @@ import {
   findAndReplaceOrAddNode,
   insertParagraphAfterRequestBlocks,
   updateEditorContent,
-  convertCurlToRequest,
-} from "@voiden/core-extensions";
+} from '../lib/converter.js';
+import { convert as convertCurlToRequest } from '../lib/parser/importers/curl.js';
 import { Editor, Extension } from "@tiptap/core";
 import { Plugin } from "@tiptap/pm/state";
 import { EditorView } from "@tiptap/pm/view";
-import { Fragment, Node, Slice } from "@tiptap/pm/model";
-import { DOMParser as ProseMirrorDOMParser } from "prosemirror-model";
+import { DOMParser as ProseMirrorDOMParser, Fragment, Node, Slice } from "@tiptap/pm/model";
 import markdownIt from "markdown-it";
 // TODO: Expose through SDK
 // import { prettifyJSONC } from "@/utils/jsonc.ts";
