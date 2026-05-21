@@ -135,6 +135,17 @@ for (const pluginId of plugins) {
           resolveId(id) { if (id.endsWith('.css')) return '\0empty-css' },
           load(id) { if (id === '\0empty-css') return 'export default {}' },
         },
+        // Redirect Node's `buffer` module to globalThis.Buffer (available in Electron)
+        {
+          name: 'node-buffer',
+          resolveId(id) { if (id === 'buffer') return '\0node-buffer' },
+          load(id) {
+            if (id === '\0node-buffer') return [
+              'export const Buffer = globalThis.Buffer',
+              'export default { Buffer: globalThis.Buffer }',
+            ].join('\n')
+          },
+        },
       ],
       esbuild: {
         jsx: 'automatic',
@@ -150,6 +161,11 @@ for (const pluginId of plugins) {
         minify: true,
         sourcemap: false,
         rollupOptions: {
+          onwarn(warning, warn) {
+            // Suppress "use client" directive warnings from react-query / lucide-react
+            if (warning.code === 'MODULE_LEVEL_DIRECTIVE') return
+            warn(warning)
+          },
           output: {
             // Inline all dynamic imports so the output is a single self-contained file.
             // Without this, Vite splits lazy imports into separate chunks that the

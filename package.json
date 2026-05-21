@@ -150,6 +150,7 @@
     "typescript": "^5.0.0",
     "undici": "^7.22.0",
     "vite": "^5.0.0",
+    "yaml": "*",
     "zustand": "*"
   },
   "keywords": [
