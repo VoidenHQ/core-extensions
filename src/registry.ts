@@ -1,7 +1,7 @@
 /**
  * Auto-generated extension registry
  * DO NOT EDIT MANUALLY - run 'yarn generate-registry' to update
- * Generated on: 2026-05-14T09:05:46.315Z
+ * Generated on: 2026-05-21T09:48:17.833Z
  */
 
 export interface ExtensionMetadata {
@@ -23,6 +23,7 @@ export interface ExtensionMetadata {
 }
 
 // Metadata-only export for Electron main process (no React/DOM dependencies)
+// Includes ALL core extensions — both bundled and unbundled.
 export const coreExtensions: ExtensionMetadata[] = [
   {
     "id": "voiden-rest-api",
@@ -205,7 +206,7 @@ export const coreExtensions: ExtensionMetadata[] = [
     "id": "voiden-advanced-auth",
     "name": "Advanced Authentication",
     "description": "Advanced authentication support for HTTP/REST APIs including Bearer Token, Basic Auth, API Key, OAuth 1.0/2.0, Digest, AWS Signature, and more",
-    "version": "2.0.0",
+    "version": "2.0.1",
     "author": "Voiden Team",
     "enabled": true,
     "priority": 20,
@@ -260,7 +261,7 @@ export const coreExtensions: ExtensionMetadata[] = [
     "id": "voiden-sockets-grpcs",
     "name": "Sockets & gRPC APIs",
     "description": "Voiden Sockets provide comprehensive support for WebSocket (WSS) and gRPC communication with unary, server streaming, client streaming, and bidirectional streaming patterns",
-    "version": "1.1.0",
+    "version": "1.1.1",
     "author": "Voiden Team",
     "enabled": true,
     "priority": 20,
@@ -416,6 +417,7 @@ export const coreExtensions: ExtensionMetadata[] = [
         ]
       }
     },
+    "mainProcess": true,
     "dependencies": {
       "core": "^1.0.0",
       "sdk": "^1.0.0"
@@ -433,8 +435,7 @@ export const coreExtensions: ExtensionMetadata[] = [
       "voiden.cancel() to cancel request from pre-script",
       "CodeMirror JavaScript editor with syntax highlighting"
     ],
-    "type": "core",
-    "mainProcess": true
+    "type": "core"
   },
   {
     "id": "voiden-faker",

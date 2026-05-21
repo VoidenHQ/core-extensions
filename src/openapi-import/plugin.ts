@@ -1,6 +1,7 @@
 // src/openapi-import/plugin.ts
 import React from "react";
-import type { PluginContext } from "@voiden/sdk/ui";
+import type { CorePluginContext } from '../types/plugin-context';
+type PluginContext = CorePluginContext;
 import { OpenAPIImportButton } from "./components/OpenAPIImportButton";
 import { createOpenApiOverlay } from "./OverlayHost";
 import { NodeViewWrapper } from "@tiptap/react";
@@ -34,21 +35,6 @@ const openapiImportPlugin = (context: ExtendedPluginContextExplicit) => {
   let currentTab: EditorTab | null = null;
   let overlay: ReturnType<typeof createOpenApiOverlay> | null = null;
   let lastTabReopen = "";
-  const extendedContext = {
-    ...context,
-    pipeline: {
-      registerHook: async (stage: string, handler: any, priority?: number) => {
-        try {
-          // @ts-ignore - Vite dynamic import
-          const { hookRegistry } = await import(/* @vite-ignore */ '@/core/request-engine/pipeline');
-          hookRegistry.registerHook('simple-assertions', stage as any, handler, priority);
-        } catch (error) {
-          console.error("Failed to register hook:", error);
-        }
-      },
-    },
-
-  };
   return {
     onload: async () => {
       // Create overlay only after the app is mounted
@@ -150,8 +136,8 @@ const openapiImportPlugin = (context: ExtendedPluginContextExplicit) => {
         },
       });
 
-      if (extendedContext.pipeline?.registerHook) {
-        await extendedContext.pipeline.registerHook(
+      if (context.pipeline?.registerHook) {
+        await context.pipeline.registerHook(
           "post-processing",
           async (context: any) => {
             const { requestState, responseState, metadata } = context;
@@ -191,7 +177,7 @@ const openapiImportPlugin = (context: ExtendedPluginContextExplicit) => {
 
               const { validateOpenAPI } = await import('./lib/openapiValidationEngine')
               // Execute validation
-              const result = await validateOpenAPI(validation, validationContext, extendedContext);
+              const result = await validateOpenAPI(validation, validationContext, context);
 
               // Store results in responseState.metadata
               if (!responseState.metadata) {

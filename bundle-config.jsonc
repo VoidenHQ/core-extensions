@@ -32,7 +32,7 @@
 
     // ── Data & utilities ──────────────────────────────────────────────────────
     "voiden-faker": true,             // Fake data generation
-    // "voiden-stitch": true,         // Chain requests — uncomment to bundle
+    "voiden-stitch": true,         // Chain requests — uncomment to bundle
 
     // ── Documentation & import ───────────────────────────────────────────────
     "md-preview": true,               // Markdown preview blocks

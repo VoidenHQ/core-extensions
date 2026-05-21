@@ -12,7 +12,7 @@
  * - And more...
  */
 
-import type { PluginContext } from '@voiden/sdk/ui';
+import type { CorePluginContext as PluginContext } from '../types/plugin-context';
 import { insertAuthNode } from './lib/utils';
 import {
   generateCodeVerifier,
@@ -46,11 +46,8 @@ export default function createAdvancedAuthPlugin(context: PluginContext) {
       // the token via Electron IPC and writes the new token to
       // .voiden/.process.env.json so preSendProcessHook picks it up.
       try {
-        // @ts-ignore - Vite resolves @/ alias at serve time
-        const { hookRegistry } = await import(/* @vite-ignore */ '@/core/request-engine/pipeline');
-        hookRegistry.registerHook(
-          'voiden-advanced-auth',
-          'request-compilation' as any,
+        await context.pipeline.registerHook(
+          'request-compilation',
           async (ctx: any) => {
             try {
               // Check if this request uses oauth2 auth (passed from sendRequestHybrid)
@@ -290,11 +287,8 @@ export default function createAdvancedAuthPlugin(context: PluginContext) {
 
       // ── OAuth2 401 Detection Hook ─────────────────────────────────
       try {
-        // @ts-ignore
-        const { hookRegistry: hookRegistry401 } = await import(/* @vite-ignore */ '@/core/request-engine/pipeline');
-        hookRegistry401.registerHook(
-          'voiden-advanced-auth',
-          'post-processing' as any,
+        await context.pipeline.registerHook(
+          'post-processing',
           (ctx: any) => {
             try {
               const auth = ctx?.requestState?.auth;

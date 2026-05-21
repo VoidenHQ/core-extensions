@@ -12,21 +12,9 @@ import {
   postProcessScriptHook,
 } from './lib/pipelineHooks.js';
 
-export default function createVoidenScriptingPlugin(context: any) {
-  const extendedContext = {
-    ...context,
-    pipeline: {
-      registerHook: async (stage: string, handler: any, priority?: number) => {
-        try {
-          // @ts-ignore - Vite dynamic import
-          const { hookRegistry } = await import(/* @vite-ignore */ '@/core/request-engine/pipeline');
-          hookRegistry.registerHook('voiden-scripting', stage as any, handler, priority);
-        } catch (error) {
-          console.error('[voiden-scripting] Failed to register hook:', error);
-        }
-      },
-    },
-  };
+import type { CorePluginContext } from '../types/plugin-context';
+
+export default function createVoidenScriptingPlugin(context: CorePluginContext) {
 
   return {
     onload: async () => {
@@ -151,23 +139,23 @@ export default function createVoidenScriptingPlugin(context: any) {
       });
 
       // 6. Register pipeline hooks
-      if (extendedContext.pipeline?.registerHook) {
+      if (context.pipeline?.registerHook) {
         // Pre-processing: capture editor document (priority 5, runs early)
-        await extendedContext.pipeline.registerHook(
+        await context.pipeline.registerHook(
           'pre-processing',
           preProcessingScriptHook,
           5,
         );
 
         // Pre-send: execute pre-request script (priority 15, after faker at 10)
-        await extendedContext.pipeline.registerHook(
+        await context.pipeline.registerHook(
           'pre-send',
           preSendScriptHook,
           15,
         );
 
         // Post-processing: execute post-response script (priority 25, after assertions at 15)
-        await extendedContext.pipeline.registerHook(
+        await context.pipeline.registerHook(
           'post-processing',
           postProcessScriptHook,
           25,
@@ -185,14 +173,12 @@ export default function createVoidenScriptingPlugin(context: any) {
 
       // 8. Expose helpers for other plugins
       const { scriptingHelpers } = await import('./lib/helpers');
-      context.exposeHelpers(scriptingHelpers);
+      context.exposeHelpers(scriptingHelpers as any);
     },
 
     onunload: async () => {
       try {
-        // @ts-ignore - Vite dynamic import
-        const { hookRegistry } = await import(/* @vite-ignore */ '@/core/request-engine/pipeline');
-        hookRegistry.unregisterExtension('voiden-scripting');
+        await context.pipeline.unregister();
       } catch {
         // Graceful cleanup
       }

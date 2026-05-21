@@ -5,7 +5,7 @@
  * This is a transitional approach until the plugin system fully supports UIExtension.
  */
 
-import { PluginContext } from '@voiden/sdk/ui';
+import type { CorePluginContext as PluginContext } from '../types/plugin-context';
 import { VoidenRestApiExtension } from './extension';
 import { restApiHistoryAdapter } from './historyAdapter';
 import { createResponseStatusNode } from './nodes/ResponseStatusNode';
@@ -19,17 +19,6 @@ import { createResponseDocNode } from './nodes/ResponseDocNode';
 
 type EditorTab = { title?: string; content?: string; tabId?: string };
 
-// Lazily cached store reference so the synchronous predicate can read unsaved content.
-let _editorStore: any = null;
-function getEditorStore() {
-  if (!_editorStore) {
-    // @ts-ignore - resolved at runtime in app context
-    (import(/* @vite-ignore */ '@/core/editors/voiden/VoidenEditor') as Promise<any>)
-      .then((m: any) => { _editorStore = m.useEditorStore; })
-      .catch(() => {});
-  }
-  return _editorStore;
-}
 
 const voidenRestApiPlugin = (context: PluginContext) => {
   // Create extension instance
@@ -310,10 +299,8 @@ const voidenRestApiPlugin = (context: PluginContext) => {
           if (editorJson.content?.some((n: any) => n.type === 'gqlquery')) return request;
           if (editorJson.content?.some((n: any) => n.type === 'socket-request')) return request;
 
-          // Import generic core helpers (protocol-agnostic)
-          // @ts-ignore - Path resolved at runtime in app context
-          const coreHelpers = await import(/* @vite-ignore */ '@/core/request-engine/getRequestFromJson');
-          const { getTable, parseAuthNode, buildHeadersWithCookies, findNode, findNodes, createNewRequestObject } = coreHelpers;
+          // Get request-building utilities exposed via context
+          const { getTable, parseAuthNode, buildHeadersWithCookies, findNode, findNodes, createNewRequestObject } = (context as any).helpers.requestUtils;
 
           // Import REST-block-specific builders from this plugin — these read json_body,
           // xml_body, yml_body, multipart-table, url-table, restFile node types.
@@ -552,16 +539,9 @@ const voidenRestApiPlugin = (context: PluginContext) => {
       // This allows other plugins to convert JSONContent to markdown with proper frontmatter
       (window as any).__voidenMarkdownConverter__ = async (jsonContent: any) => {
         try {
-          // Import the markdown converter from the app
-          // @ts-ignore - Path resolved at runtime in app context
-          const { prosemirrorToMarkdown } = await import(/* @vite-ignore */ '@/core/file-system/hooks/useFileSystem');
-          // @ts-ignore - Path resolved at runtime in app context
-          const { getSchema } = await import(/* @vite-ignore */ '@tiptap/core');
-          // @ts-ignore - Path resolved at runtime in app context
-          const { voidenExtensions } = await import(/* @vite-ignore */ '@/core/editors/voiden/extensions');
-
-          // Get the schema from the voiden extensions
-          const schema = getSchema(voidenExtensions);
+          const { prosemirrorToMarkdown, getVoidenExtensions } = (context as any).helpers;
+          const { getSchema } = await import('@tiptap/core');
+          const schema = getSchema(getVoidenExtensions());
 
           // Convert to JSON string first (prosemirrorToMarkdown expects a string)
           const contentString = JSON.stringify(jsonContent);

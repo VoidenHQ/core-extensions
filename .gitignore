@@ -1,4 +1,5 @@
 node_modules
 dist
+dist-bundles
 *.tsbuildinfo
 .DS_Store

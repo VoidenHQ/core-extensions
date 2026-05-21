@@ -4,25 +4,11 @@
  * Complete GraphQL client with query/mutation/subscription support
  */
 
-import type { PluginContext } from '@voiden/sdk/ui';
+import type { CorePluginContext as PluginContext } from '../types/plugin-context';
 import { parseGraphQLOperation } from './lib/utils';
 import manifest from './manifest.json';
 
 export default function createGraphQLPlugin(context: PluginContext) {
-  const extendedContext = {
-    ...context,
-    pipeline: {
-      registerHook: async (stage: string, handler: any, priority?: number) => {
-        try {
-          // @ts-ignore - Vite dynamic import
-          const { hookRegistry } = await import(/* @vite-ignore */ '@/core/request-engine/pipeline');
-          hookRegistry.registerHook('graphql', stage as any, handler, priority);
-        } catch (error) {
-          console.error("Failed to register GraphQL hook:", error);
-        }
-      },
-    },
-  };
 
   return {
     onload: async () => {
@@ -76,8 +62,7 @@ export default function createGraphQLPlugin(context: PluginContext) {
 
           // Use a fresh base request object — all protocol-specific fields are set below
           // @ts-ignore - Path resolved at runtime in app context
-          const { createNewRequestObject } = await import(/* @vite-ignore */ '@/core/request-engine/getRequestFromJson');
-          request = createNewRequestObject();
+          request = (context as any).helpers.requestUtils.createNewRequestObject();
 
           // Support new format (gqlurl/gqlbody children) and old format (direct attrs)
           const gqlBodyChild = gqlNode.content?.find((n: any) => n.type === 'gqlbody');

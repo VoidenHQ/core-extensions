@@ -1,7 +1,11 @@
 /**
  * Auto-generated plugin map
  * DO NOT EDIT MANUALLY - run 'yarn generate-registry' to update
- * Generated on: 2026-05-14T09:05:46.316Z
+ * Generated on: 2026-05-21T09:48:17.833Z
+ *
+ * Bundled   (11): voiden-rest-api, voiden-graphql, simple-assertions, voiden-advanced-auth, voiden-sockets-grpcs, voiden-scripting, voiden-faker, voiden-stitch, md-preview, openapi-import, postman-import
+ * Unbundled (0): —
+ * Unbundled plugins are fetched from GitHub Releases — edit bundle-config.jsonc to change this.
  */
 
 import voiden_rest_apiPlugin from './voiden-rest-api';
@@ -16,7 +20,8 @@ import md_previewPlugin from './md-preview';
 import openapi_importPlugin from './openapi-import';
 import postman_importPlugin from './postman-import';
 
-// Plugin map for UI app (has React/DOM access)
+// Plugin map for the UI app — only bundled plugins appear here.
+// Unbundled plugins are loaded from the local cache (core-extensions-cache in userData).
 export const coreExtensionPlugins: Record<string, any> = {
   'voiden-rest-api': voiden_rest_apiPlugin,
   'voiden-graphql': voiden_graphqlPlugin,

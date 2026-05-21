@@ -17,12 +17,18 @@ const srcDir = resolve(__dirname, '../src')
 const outDir = resolve(__dirname, '../dist-bundles')
 
 /**
- * Rollup plugin that replaces React/ReactDOM imports with inline code that reads
- * from window.__voiden_shims__ (populated by the host app at startup).
- * This ensures the plugin shares the host's React instance — required for hooks to work.
+ * Rollup plugin that replaces host-app imports with inline code reading from
+ * window.__voiden_shims__ (populated by the host app before any plugin loads).
+ *
+ * Covers two categories:
+ *  1. React/ReactDOM — must share the host instance so hooks work.
+ *  2. @/core/* — Vite path-alias modules from the host app that plugins
+ *     access via dynamic import(). These are shimmed so plugin bundles
+ *     resolve them without needing the host's Vite build context.
  */
 function voidenShimsPlugin() {
-  const SHIMS = {
+  // Statically-known named exports for modules that use ESM static imports.
+  const STATIC_SHIMS = {
     'react': `\
 const _s = window.__voiden_shims__['react'];
 export default _s;
@@ -49,15 +55,48 @@ export default _s;
 export const { createRoot, hydrateRoot } = _s;`,
   }
 
+  // @/core/* modules are always accessed via dynamic import() with destructuring,
+  // so we only need a default export pointing at the shim object.
+  // The consumer does: const { foo } = await import('@/core/...')
+  // which in ESM resolves to named exports, so we spread all known keys.
+  const CORE_EXPORTS = {
+    '@/core/file-system/hooks/useFileSystem': ['prosemirrorToMarkdown'],
+    '@/core/editors/voiden/extensions': ['voidenExtensions'],
+    '@/core/editors/voiden/VoidenEditor': ['useEditorStore', 'useVoidenEditorStore', 'proseClasses'],
+    '@/core/editors/voiden/utils/expandLinkedBlocks': ['expandLinkedBlocksInDoc'],
+    '@/core/editors/voiden/markdownConverter': ['parseMarkdown'],
+    '@/core/request-engine/getRequestFromJson': ['getTable', 'parseAuthNode', 'buildHeadersWithCookies', 'findNode', 'findNodes', 'createNewRequestObject', 'getRequest'],
+    '@/core/request-engine/stores/responseStore': ['useResponseStore'],
+    '@/core/request-engine/requestOrchestrator': ['requestOrchestrator'],
+    '@/core/request-engine/runtimeVariables': ['replaceProcessVariablesInText'],
+    '@/core/request-engine/pipeline': ['hookRegistry', 'PipelineStage'],
+    '@/core/history/adapterRegistry': ['historyAdapterRegistry'],
+    '@/core/stores/panelStore': ['usePanelStore'],
+    '@/core/stores/responsePanelPosition': ['getResponsePanelPosition'],
+    '@/core/environment/hooks': ['useActiveEnvironment', 'useEnvironments'],
+    // Host app module aliases
+    '@/plugins': ['useEditorEnhancementStore', 'usePluginStore'],
+    '@/main': ['getQueryClient'],
+  }
+
   return {
     name: 'voiden-shims',
     resolveId(id) {
-      if (id in SHIMS) return `\0voiden-shim:${id}`
+      if (id in STATIC_SHIMS) return `\0voiden-shim:${id}`
+      if (id in CORE_EXPORTS) return `\0voiden-shim:${id}`
       return null
     },
     load(id) {
       if (!id.startsWith('\0voiden-shim:')) return null
-      return SHIMS[id.slice('\0voiden-shim:'.length)]
+      const mod = id.slice('\0voiden-shim:'.length)
+
+      if (mod in STATIC_SHIMS) return STATIC_SHIMS[mod]
+
+      // @/core/* module: re-export known named exports from the shim object
+      const exports = CORE_EXPORTS[mod] || []
+      const key = JSON.stringify(mod)
+      const namedLines = exports.map(name => `export const ${name} = _s.${name};`).join('\n')
+      return `const _s = (window.__voiden_shims__ || {})[${key}] || {};\nexport default _s;\n${namedLines}`
     },
   }
 }
@@ -88,7 +127,15 @@ for (const pluginId of plugins) {
   try {
     await build({
       configFile: false,
-      plugins: [voidenShimsPlugin()],
+      plugins: [
+        voidenShimsPlugin(),
+        // Treat CSS imports as empty modules — host app handles styling
+        {
+          name: 'skip-css',
+          resolveId(id) { if (id.endsWith('.css')) return '\0empty-css' },
+          load(id) { if (id === '\0empty-css') return 'export default {}' },
+        },
+      ],
       esbuild: {
         jsx: 'automatic',
       },
@@ -102,6 +149,14 @@ for (const pluginId of plugins) {
         emptyOutDir: false,
         minify: true,
         sourcemap: false,
+        rollupOptions: {
+          output: {
+            // Inline all dynamic imports so the output is a single self-contained file.
+            // Without this, Vite splits lazy imports into separate chunks that the
+            // OTA downloader would also need to fetch.
+            inlineDynamicImports: true,
+          },
+        },
       },
       logLevel: 'silent',
     })

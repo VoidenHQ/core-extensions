@@ -42,9 +42,6 @@ jobs:
       - name: Install dependencies
         run: yarn install --immutable
 
-      - name: Build TypeScript (registry + types)
-        run: yarn build
-
       - name: Build per-plugin ESM bundles
         run: yarn build:bundles
 

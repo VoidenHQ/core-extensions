@@ -7,7 +7,9 @@
 import { VoidenFakerExtension } from './extension';
 import { mountFakerHoverTooltip, unmountFakerHoverTooltip } from './lib/fakerHoverTooltip';
 
-const voidenFakerPlugin = (context: any) => {
+import type { CorePluginContext } from '../types/plugin-context';
+
+const voidenFakerPlugin = (context: CorePluginContext) => {
   // Create extension instance
   const extension = new VoidenFakerExtension();
 
@@ -15,25 +17,12 @@ const voidenFakerPlugin = (context: any) => {
   let fakerSuggestionExtension: any = null;
   let fakerAutocompleteExtension: any = null;
 
-  // Get hookRegistry from context
-  const getHookRegistry = () => {
-    // The hookRegistry will be available via dynamic import in the UI app context
-    return context.hookRegistry;
-  };
-
   // Create a minimal UIExtensionContext that maps to PluginContext
   const createExtensionContext = () => {
     return {
       pipeline: {
         registerHook: async (stage: string, handler: any, priority?: number) => {
-
-          // Dynamic import of hookRegistry (only works in UI app context)
-          try {
-            // @ts-ignore - Path resolved at runtime in app context
-            const { hookRegistry } = await import(/* @vite-ignore */ '@/core/request-engine/pipeline');
-            hookRegistry.registerHook('voiden-faker', stage as any, handler, priority);
-          } catch (error) {
-          }
+          await context.pipeline.registerHook(stage, handler, priority);
         },
       },
       metadata: {
@@ -85,9 +74,7 @@ const voidenFakerPlugin = (context: any) => {
 
       // Unregister hooks
       try {
-        // @ts-ignore - Path resolved at runtime in app context
-        const { hookRegistry } = await import(/* @vite-ignore */ '@/core/request-engine/pipeline');
-        hookRegistry.unregisterExtension('voiden-faker');
+        await context.pipeline.unregister();
       } catch (error) {
       }
     },

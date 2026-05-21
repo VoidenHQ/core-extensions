@@ -5,34 +5,27 @@
  * Registers the /stitch block node, results sidebar tab, and slash command.
  */
 
-export default function createVoidenStitchPlugin(context: any) {
+import type { CorePluginContext } from '../types/plugin-context';
+
+export default function createVoidenStitchPlugin(context: CorePluginContext) {
   return {
     onload: async () => {
       // 1. Import and create the StitchNode
       const { NodeViewWrapper, RequestBlockHeader } = context.ui.components;
       const { createStitchNode } = await import('./nodes/StitchNode');
 
-      // Import useActiveEnvironment hook via dynamic Vite import
-      // The StitchNodeView is a React component so it can call hooks
-      // @ts-ignore - Vite dynamic import
-      const { useActiveEnvironment, useEnvironments } = await import(/* @vite-ignore */ '@/core/environment/hooks') as any;
+      // Get environment hooks from context (must only be used inside React components / node views)
+      const { useActiveEnvironment, useEnvironments } = (context as any).helpers;
 
       // Open the response panel (stitch results now render inside it)
       const openResultsTab = async () => {
         try {
-          // @ts-ignore - Vite dynamic import
-          const { getResponsePanelPosition } = await import(/* @vite-ignore */ '@/core/stores/responsePanelPosition') as any;
-          const responsePanelPosition = getResponsePanelPosition();
+          const responsePanelPosition = context.ui.getResponsePanelPosition();
 
           if (responsePanelPosition === 'bottom') {
-            // @ts-ignore - Vite dynamic import
-            const { usePanelStore } = await import(/* @vite-ignore */ '@/core/stores/panelStore') as any;
-            const { setBottomActiveView, openBottomPanel, bottomPanelRef } = usePanelStore.getState();
-            setBottomActiveView('sidebar');
-            openBottomPanel();
-            if (bottomPanelRef?.current) {
-              bottomPanelRef.current.expand();
-            }
+            context.ui.setBottomActiveView('sidebar');
+            context.ui.openBottomPanel();
+            context.ui.expandBottomPanel();
           } else {
             context.ui.openRightPanel();
           }
@@ -104,7 +97,7 @@ export default function createVoidenStitchPlugin(context: any) {
       context.exposeHelpers({
         StitchResultsSidebar,
         stitchStore,
-      });
+      } as any);
     },
 
     onunload: async () => {

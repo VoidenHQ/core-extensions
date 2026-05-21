@@ -2,7 +2,7 @@
  * Voiden Socket Extension
  */
 
-import type { PluginContext } from '@voiden/sdk/ui';
+import type { CorePluginContext as PluginContext } from '../types/plugin-context';
 import { insertSocketNode } from './lib/utils';
 import { createMessagesNode } from './nodes/MessagesNode';
 import { createGrpcMessagesNode } from './nodes/gRPCMessageNode';
@@ -81,20 +81,6 @@ function getGrpcMetadata(editorJson: any): Record<string, string> {
 let _pendingProtoServices: any[] | null = null;
 
 export default function createSocketPlugin(context: PluginContext) {
-  const extendedContext = {
-    ...context,
-    pipeline: {
-      registerHook: async (stage: string, handler: any, priority?: number) => {
-        try {
-          // @ts-ignore - Vite dynamic import
-          const { hookRegistry } = await import(/* @vite-ignore */ '@/core/request-engine/pipeline');
-          hookRegistry.registerHook('web-socket', stage as any, handler, priority);
-        } catch (error) {
-          console.error("Failed to register hook:", error);
-        }
-      },
-    },
-  };
   return {
     onload: async () => {
       const { SocketRequestNode } = await import('./nodes/RequestNode');
@@ -160,9 +146,7 @@ export default function createSocketPlugin(context: PluginContext) {
           let sourceFilePath: string | null = null;
           let capturedTabId: string | null = null;
           try {
-            // @ts-ignore
-            const { useResponseStore } = await import(/* @vite-ignore */ '@/core/request-engine/stores/responseStore');
-            capturedTabId = useResponseStore.getState().currentRequestTabId;
+            capturedTabId = await (context as any).response.getCurrentTabId();
             if (capturedTabId) {
               const panelData = await (window as any).electron?.state?.getPanelTabs('main');
               const tab = (panelData?.tabs as any[])?.find((t: any) => t.id === capturedTabId && t.type === 'document');
@@ -185,9 +169,7 @@ export default function createSocketPlugin(context: PluginContext) {
             // a broken tab with the "no identifier provided" message.
             if (!response.grpcId) {
               try {
-                // @ts-ignore
-                const { useResponseStore } = await import(/* @vite-ignore */ '@/core/request-engine/stores/responseStore');
-                useResponseStore.getState().setError(
+                await (context as any).response.setError(
                   capturedTabId,
                   response.error || 'gRPC connection could not be established'
                 );
@@ -236,9 +218,8 @@ export default function createSocketPlugin(context: PluginContext) {
             return request;
           }
 
-          // Import generic core helpers (headers, auth, table reading)
-          // @ts-ignore - Path resolved at runtime in app context
-          const { buildHeadersWithCookies, getTable, parseAuthNode } = await import(/* @vite-ignore */ '@/core/request-engine/getRequestFromJson');
+          // Get request-building utilities from voiden-rest-api helpers
+          const { buildHeadersWithCookies, getTable, parseAuthNode } = (context as any).helpers.requestUtils;
 
           // Read the gRPC payload from the json_body node.
           // json_body is owned by voiden-rest-api but is also reused for gRPC payload editing.
@@ -435,11 +416,7 @@ export default function createSocketPlugin(context: PluginContext) {
       }
 
       // Register socket history adapter with the adapter registry
-      {
-        // @ts-ignore - Path resolved at runtime in app context
-        const { historyAdapterRegistry } = await import(/* @vite-ignore */ '@/core/history/adapterRegistry');
-        historyAdapterRegistry.register(socketHistoryAdapter);
-      }
+      context.registerHistoryAdapter(socketHistoryAdapter);
 
       // Register history curl builder for socket protocols (WS/WSS → websocat, GRPC/GRPCS → grpcurl)
       if ((context as any).history?.registerCurlBuilder) {

@@ -3,27 +3,12 @@
  * Provides assertion testing capabilities for HTTP requests
  */
 
-import type { PluginContext } from "@voiden/sdk/ui";
+import type { CorePluginContext as PluginContext } from '../types/plugin-context';
 import { insertAssertionsTable } from "./lib/utils.js";
 import { postProcessAssertionsHook } from "./lib/pipelineHook.js";
 import { enhanceResponseWithAssertions } from "./lib/responseEnhancer.js";
 
 export default function createSimpleAssertionsPlugin(context: PluginContext) {
-  // Extend context with pipeline API
-  const extendedContext = {
-    ...context,
-    pipeline: {
-      registerHook: async (stage: string, handler: any, priority?: number) => {
-        try {
-          // @ts-ignore - Vite dynamic import
-          const { hookRegistry } = await import(/* @vite-ignore */ '@/core/request-engine/pipeline');
-          hookRegistry.registerHook('simple-assertions', stage as any, handler, priority);
-        } catch (error) {
-          console.error("Failed to register hook:", error);
-        }
-      },
-    },
-  };
 
   return {
     onload: async () => {
@@ -166,8 +151,8 @@ export default function createSimpleAssertionsPlugin(context: PluginContext) {
       });
 
       // Register pre-processing hook to capture editor document
-      if (extendedContext.pipeline?.registerHook) {
-        await extendedContext.pipeline.registerHook(
+      if (context.pipeline?.registerHook) {
+        await context.pipeline.registerHook(
           "pre-processing",
           async (context: any) => {
             // Store editor JSON with expanded linked blocks in requestState for post-processing
@@ -176,9 +161,7 @@ export default function createSimpleAssertionsPlugin(context: PluginContext) {
 
               // Expand linked blocks so imported assertions are included
               try {
-                // @ts-ignore - Path resolved at runtime in app context
-                const { expandLinkedBlocksInDoc } = await import(/* @vite-ignore */ '@/core/editors/voiden/utils/expandLinkedBlocks');
-                editorJson = await expandLinkedBlocksInDoc(editorJson, { forceRefresh: true });
+                editorJson = await (context as any).helpers.expandLinkedBlocksInDoc(editorJson, { forceRefresh: true });
               } catch (error) {
                 console.warn("[Simple Assertions] Failed to expand linked blocks:", error);
                 // Continue with unexpanded JSON
@@ -198,7 +181,7 @@ export default function createSimpleAssertionsPlugin(context: PluginContext) {
           5 // Run early
         );
 
-        await extendedContext.pipeline.registerHook(
+        await context.pipeline.registerHook(
           "post-processing",
           postProcessAssertionsHook,
           15 // Priority: run after response is processed but before display

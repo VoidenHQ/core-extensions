@@ -1,5 +1,5 @@
 import React, { useEffect } from "react";
-import type { PluginContext } from "@voiden/sdk/ui";
+import type { CorePluginContext as PluginContext } from '../types/plugin-context';
 import { OpenAPIImportPanel } from "./components/OpenAPIImportPanel";
 import * as ReactDomClient from "react-dom/client";
 import * as ReactDom from "react-dom";
