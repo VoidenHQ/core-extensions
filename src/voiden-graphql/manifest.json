@@ -3,6 +3,7 @@
   "name": "Voiden GraphQL",
   "description": "GraphQL client with schema importer for building queries through a dedicated UI or editing manually. Supports queries, mutations, subscriptions with variables. Builds its own requests with auto-generated headers and POST method",
   "version": "1.0.0",
+  "voidenVersion": ">=2.0.0",
   "author": "Voiden Team",
   "enabled": true,
   "priority": 15,

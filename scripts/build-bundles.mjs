@@ -8,7 +8,7 @@
  */
 
 import { build } from 'vite'
-import { readdirSync, existsSync } from 'fs'
+import { readdirSync, existsSync, readFileSync } from 'fs'
 import { resolve, join } from 'path'
 import { fileURLToPath } from 'url'
 
@@ -53,6 +53,28 @@ export const Fragment = _s.Fragment;`,
 const _s = window.__voiden_shims__['react-dom/client'];
 export default _s;
 export const { createRoot, hydrateRoot } = _s;`,
+
+    // @tanstack/react-query — must share host instance so QueryClientContext matches.
+    // If the plugin bundles its own react-query it creates a new QueryClientContext,
+    // which is invisible to the host's QueryClientProvider → useQuery fails → "Invalid hook call".
+    '@tanstack/react-query': `\
+const _s = window.__voiden_shims__['@tanstack/react-query'];
+export default _s;
+export const { useQuery, useMutation, useQueryClient, useInfiniteQuery,
+  QueryClient, QueryClientProvider, QueryCache, MutationCache,
+  useIsFetching, useIsMutating, useSuspenseQuery, useSuspenseInfiniteQuery,
+  useSuspenseQueries, useQueries, HydrationBoundary, dehydrate, hydrate,
+  focusManager, onlineManager, replaceEqualDeep, hashKey } = _s;`,
+
+    // @tiptap/react — must share host instance so NodeViewWrapper React context matches
+    // ReactNodeViewRenderer (in plugins) and NodeViewWrapper (from host context) must
+    // use the same @tiptap/react so node-view context lookups work and hooks don't fail.
+    '@tiptap/react': `\
+const _s = window.__voiden_shims__['@tiptap/react'];
+export default _s;
+export const { ReactNodeViewRenderer, NodeViewWrapper, NodeViewContent,
+  useEditor, EditorContent, ReactRenderer, FloatingMenu, BubbleMenu,
+  useReactNodeView, useCurrentEditor } = _s;`,
 
     // CodeMirror — must share host instances so extension instanceof checks pass
     '@codemirror/state': `\
@@ -126,14 +148,14 @@ export const { CompletionContext, CompletionResult, autocompletion,
   }
 }
 
-// Discover all plugin directories (must have manifest.json + plugin.ts)
+// Discover all plugin directories (must have manifest.json + plugin.ts or index.ts)
+const ENTRY_CANDIDATES = ['plugin.ts', 'index.ts']
+
 const plugins = readdirSync(srcDir, { withFileTypes: true })
   .filter(e => {
     if (!e.isDirectory()) return false
-    return (
-      existsSync(join(srcDir, e.name, 'manifest.json')) &&
-      existsSync(join(srcDir, e.name, 'plugin.ts'))
-    )
+    if (!existsSync(join(srcDir, e.name, 'manifest.json'))) return false
+    return ENTRY_CANDIDATES.some(f => existsSync(join(srcDir, e.name, f)))
   })
   .map(e => e.name)
 
@@ -146,13 +168,33 @@ console.log(`Building ${plugins.length} plugin bundle(s): ${plugins.join(', ')}\
 
 let failed = 0
 for (const pluginId of plugins) {
-  const entry = join(srcDir, pluginId, 'plugin.ts')
+  const entry = ENTRY_CANDIDATES.map(f => join(srcDir, pluginId, f)).find(p => existsSync(p))
+  if (!entry) {
+    console.log(` ✗ (no entry file found)`)
+    failed++
+    continue
+  }
   process.stdout.write(`  Building ${pluginId}...`)
 
   try {
     await build({
       configFile: false,
       plugins: [
+        // Stamp every bundle with a shim compatibility version and the plugin's manifest metadata.
+        // The host uses __voiden_bundle_version__ to skip stale bundles, and __voiden_manifest__
+        // to update the extension's description, readme, and capabilities shown in the UI.
+        {
+          name: 'inject-bundle-version',
+          renderChunk(code) {
+            const manifestPath = join(srcDir, pluginId, 'manifest.json')
+            const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
+            const prefix = [
+              `export const __voiden_bundle_version__ = 2;`,
+              `export const __voiden_manifest__ = ${JSON.stringify(manifest)};`,
+            ].join('\n')
+            return { code: `${prefix}\n${code}`, map: null }
+          },
+        },
         voidenShimsPlugin(),
         // Treat CSS imports as empty modules — host app handles styling
         {

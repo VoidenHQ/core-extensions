@@ -40,6 +40,7 @@ for (const entry of readdirSync(srcDir, { withFileTypes: true })) {
     version: manifest.version,
     name: manifest.name ?? entry.name,
     file: `${entry.name}.js`,
+    ...(manifest.voidenVersion ? { voidenVersion: manifest.voidenVersion } : {}),
   }
 }
 

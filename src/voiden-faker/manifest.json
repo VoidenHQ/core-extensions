@@ -2,6 +2,7 @@
   "id": "voiden-faker",
   "name": "Voiden Faker",
   "version": "1.1.0",
+  "voidenVersion": ">=2.0.0",
   "description": "Generate fake data using Faker.js in your API requests",
   "author": "Voiden Team",
   "enabled": true,
