@@ -36,7 +36,11 @@ for (const entry of readdirSync(srcDir, { withFileTypes: true })) {
     continue
   }
 
-  plugins[entry.name] = {
+  // Use manifest.id as the canonical plugin key so it matches the Electron
+  // extension registry. Fall back to directory name if id is missing.
+  const pluginId = manifest.id ?? entry.name
+
+  plugins[pluginId] = {
     version: manifest.version,
     name: manifest.name ?? entry.name,
     file: `${entry.name}.js`,
